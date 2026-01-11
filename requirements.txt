@@ -1,0 +1,7 @@
+aiogram>=3.0.0
+sqlalchemy[asyncio]>=2.0.0
+asyncpg
+alembic
+python-dotenv
+flask
+pydantic
