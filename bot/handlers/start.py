@@ -2,14 +2,14 @@ from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from core.database import get_session
+from core.database import async_session
 from core.models import User
 
 async def start_handler(message: Message):
     tg_id = message.from_user.id
     full_name = message.from_user.full_name
 
-    async with get_session() as session:
+    async with async_session() as session:
         user = await session.get(User, tg_id)
         if user:
             user.full_name = full_name
