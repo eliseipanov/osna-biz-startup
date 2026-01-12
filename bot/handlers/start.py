@@ -1,4 +1,4 @@
-from aiogram import Dispatcher
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -6,6 +6,9 @@ from core.database import async_session
 from core.models import User
 from bot.keyboards.main_menu import get_main_menu_keyboard
 
+router = Router()
+
+@router.message(Command("start"))
 async def start_handler(message: Message):
     tg_id = message.from_user.id
     full_name = message.from_user.full_name
@@ -20,6 +23,3 @@ async def start_handler(message: Message):
         await session.commit()
 
     await message.answer("Вітаємо в Osnabrück Farm Connect! Оберіть розділ нижче 👇", reply_markup=get_main_menu_keyboard())
-
-def register_start_handlers(dp: Dispatcher):
-    dp.message.register(start_handler, Command("start"))
