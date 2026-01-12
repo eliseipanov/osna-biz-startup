@@ -51,6 +51,7 @@ class Farm(Base):
     location = Column(String(255), nullable=True)
     contact_info = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
+    image_path = Column(String(255), nullable=True)
 
     products = relationship("Product", back_populates="farm")
 
@@ -71,6 +72,7 @@ class Product(Base):
     description_de = Column(Text)
     category_id = Column(Integer, ForeignKey("categories.id"))
     farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
+    image_path = Column(String(255), nullable=True)
 
     category = relationship("Category", back_populates="products")
     farm = relationship("Farm", back_populates="products")
@@ -88,6 +90,7 @@ class Category(Base):
     image_url = Column(String)
     description = Column(Text)
     description_de = Column(Text)
+    image_path = Column(String(255), nullable=True)
 
     products = relationship("Product", back_populates="category")
 

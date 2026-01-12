@@ -8,6 +8,7 @@ from flask import Flask, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
+from flask_admin.form.upload import FileUploadField
 from flask_admin.menu import MenuLink
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
@@ -60,7 +61,7 @@ class SecureModelView(ModelView):
 
 # Кастомна в'юха для продуктів
 class ProductView(SecureModelView):
-    column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm')
+    column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm', 'image_path')
     column_display_pk = True
     column_labels = {
         'id': 'ID',
@@ -71,7 +72,11 @@ class ProductView(SecureModelView):
         'sku': 'Артикул (SKU)',
         'availability_status': 'Статус наявності',
         'category': 'Категорія',
-        'farm': 'Ферма/Виробник'
+        'farm': 'Ферма/Виробник',
+        'image_path': 'Шлях до зображення'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads')
     }
 
 # Кастомна в'юха для категорій
@@ -83,7 +88,11 @@ class CategoryView(SecureModelView):
         'slug': 'Слаг',
         'image_url': 'URL зображення',
         'description': 'Опис (Укр)',
-        'description_de': 'Опис (Нім)'
+        'description_de': 'Опис (Нім)',
+        'image_path': 'Шлях до зображення'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads')
     }
 
 # Кастомна в'юха для ферм
@@ -95,7 +104,11 @@ class FarmView(SecureModelView):
         'description_de': 'Опис (Нім)',
         'location': 'Місцезнаходження',
         'contact_info': 'Контактна інформація',
-        'is_active': 'Активний'
+        'is_active': 'Активний',
+        'image_path': 'Шлях до зображення'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads')
     }
 
 # Кастомна в'юха для користувачів
