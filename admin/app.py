@@ -10,6 +10,7 @@ import tempfile
 import os
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin
+from flask_admin.theme import Bootstrap4Theme
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.form.upload import FileUploadField
 from flask_admin.menu import MenuLink
@@ -22,7 +23,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+# app = Flask(__name__)
+app = Flask(__name__, template_folder='../templates', static_folder='../static')
+
+
 app.config['SECRET_KEY'] = os.getenv("BOT_TOKEN", "dev-secret")
 
 # Налаштування бази
@@ -132,7 +136,13 @@ class UserView(SecureModelView):
     column_exclude_list = ['password_hash']  # Hide password hash from list view
     form_excluded_columns = ['password_hash']  # Hide from form, handle separately if needed
 
-admin = Admin(app, name='Osna Farm Admin')
+admin_theme = Bootstrap4Theme(
+    swatch='sandstone', # oder darkly, cerulean, cosmo, cyborg, darkly, flatly, journal, litera, lumen, lux, materia, minty, pulse, sandstone, simplex, sketchy, spacelab, superhero, united, yeti 
+    base_template='admin/master.html'
+)
+
+admin = Admin(app, name='Osna Farm', theme=admin_theme)
+#admin.base_template = 'admin/master.html'
 
 # Add logout menu item
 admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
