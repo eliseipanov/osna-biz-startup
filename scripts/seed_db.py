@@ -6,13 +6,13 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.database import async_session
-from core.models import Product, Category
+from core.models import Product, Category, Translation
 from sqlalchemy import text
 
 async def seed():
     async with async_session() as session:
         # Hard reset: truncate tables
-        await session.execute(text("TRUNCATE categories, products RESTART IDENTITY CASCADE;"))
+        await session.execute(text("TRUNCATE categories, products, translations RESTART IDENTITY CASCADE;"))
         await session.commit()
 
         # Create categories first
@@ -76,9 +76,26 @@ async def seed():
             )
             session.add(p)
 
+        # Add translations
+        translations_data = [
+            {"key": "welcome_message", "value_uk": "Вітаємо в Osnabrück Farm Connect!", "value_de": "Willkommen bei Osnabrück Farm Connect!"},
+            {"key": "catalog_button", "value_uk": "🥩 Каталог", "value_de": "🥩 Katalog"},
+            {"key": "cart_button", "value_uk": "🛒 Кошик", "value_de": "🛒 Warenkorb"},
+            {"key": "orders_button", "value_uk": "📋 Мої замовлення", "value_de": "📋 Meine Bestellungen"},
+            {"key": "profile_button", "value_uk": "👤 Профіль", "value_de": "👤 Profil"},
+        ]
+
+        for trans_data in translations_data:
+            trans = Translation(
+                key=trans_data["key"],
+                value_uk=trans_data["value_uk"],
+                value_de=trans_data["value_de"]
+            )
+            session.add(trans)
+
         try:
             await session.commit()
-            print(f"✅ Database reset complete! Added {len(categories_data)} categories and {len(products_data)} products.")
+            print(f"✅ Database reset complete! Added {len(categories_data)} categories, {len(products_data)} products, and {len(translations_data)} translations.")
         except Exception as e:
             await session.rollback()
             print(f"❌ Error: {e}")
