@@ -29,20 +29,43 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 db = SQLAlchemy(app)
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order
+from core.models import User, Product, Order, Category, StaticPage
+
+class LoginForm(FlaskForm):
+
+    username = StringField('Username')
+
+    password = PasswordField('Password')
+
+    submit = SubmitField('Login')
+
+class SecureModelView(ModelView):
+
+    def is_accessible(self):
+
+        return current_user.is_authenticated and current_user.is_admin
 
 # Кастомна в'юха для продуктів
-class ProductView(ModelView):
+class ProductView(SecureModelView):
     column_list = ('id', 'name', 'price', 'unit', 'is_available')
     column_display_pk = True
 
 admin = Admin(app, name='Osna Farm Admin')
 
 # Додаємо в'юхи правильно
-admin.add_view(ModelView(User, db.session))
+admin.add_view(SecureModelView(User, db.session))
 admin.add_view(ProductView(Product, db.session))
-admin.add_view(ModelView(Order, db.session))
+admin.add_view(SecureModelView(Order, db.session))
+admin.add_view(SecureModelView(Category, db.session))
+admin.add_view(SecureModelView(StaticPage, db.session))
 
 if __name__ == '__main__':
     # Встановлюємо кодування для виводу в термінал прямо з коду

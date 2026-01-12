@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
 from enum import Enum as PyEnum
+from flask_login import UserMixin
 
 class OrderStatus(PyEnum):
     pending = "pending"

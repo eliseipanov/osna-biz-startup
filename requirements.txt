@@ -7,3 +7,6 @@ flask
 pydantic
 Flask-Admin
 psycopg2-binary
+Flask-Login
+flask-wtf
+email-validator
