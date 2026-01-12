@@ -47,7 +47,7 @@ def load_user(user_id):
         return session.execute(select(User).where(User.id == int(user_id))).scalar_one_or_none()
 
 # Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -60,8 +60,43 @@ class SecureModelView(ModelView):
 
 # Кастомна в'юха для продуктів
 class ProductView(SecureModelView):
-    column_list = ('id', 'name', 'name_de', 'price', 'unit', 'is_available', 'category')
+    column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm')
     column_display_pk = True
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва (Укр)',
+        'name_de': 'Назва (Нім)',
+        'price': 'Ціна',
+        'unit': 'Одиниця виміру',
+        'sku': 'Артикул (SKU)',
+        'availability_status': 'Статус наявності',
+        'category': 'Категорія',
+        'farm': 'Ферма/Виробник'
+    }
+
+# Кастомна в'юха для категорій
+class CategoryView(SecureModelView):
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва (Укр)',
+        'name_de': 'Назва (Нім)',
+        'slug': 'Слаг',
+        'image_url': 'URL зображення',
+        'description': 'Опис (Укр)',
+        'description_de': 'Опис (Нім)'
+    }
+
+# Кастомна в'юха для ферм
+class FarmView(SecureModelView):
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва',
+        'description_uk': 'Опис (Укр)',
+        'description_de': 'Опис (Нім)',
+        'location': 'Місцезнаходження',
+        'contact_info': 'Контактна інформація',
+        'is_active': 'Активний'
+    }
 
 # Кастомна в'юха для користувачів
 class UserView(SecureModelView):
@@ -77,8 +112,9 @@ admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
 # Додаємо в'юхи правильно
 admin.add_view(UserView(User, db.session))
 admin.add_view(ProductView(Product, db.session))
+admin.add_view(FarmView(Farm, db.session))
 admin.add_view(SecureModelView(Order, db.session))
-admin.add_view(SecureModelView(Category, db.session))
+admin.add_view(CategoryView(Category, db.session))
 admin.add_view(SecureModelView(StaticPage, db.session))
 admin.add_view(SecureModelView(GlobalSettings, db.session))
 admin.add_view(SecureModelView(Translation, db.session))

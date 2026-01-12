@@ -17,6 +17,11 @@ class LanguagePref(PyEnum):
     uk = "uk"
     de = "de"
 
+class AvailabilityStatus(PyEnum):
+    IN_STOCK = "IN_STOCK"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+    ON_REQUEST = "ON_REQUEST"
+
 class User(Base, UserMixin):
     __tablename__ = "users"
 
@@ -36,6 +41,22 @@ class User(Base, UserMixin):
 
     orders = relationship("Order", back_populates="user")
 
+class Farm(Base):
+    __tablename__ = "farms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description_uk = Column(Text, nullable=True)
+    description_de = Column(Text, nullable=True)
+    location = Column(String(255), nullable=True)
+    contact_info = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    products = relationship("Product", back_populates="farm")
+
+    def __str__(self):
+        return self.name
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -44,15 +65,18 @@ class Product(Base):
     name_de = Column(String)
     price = Column(Float)
     unit = Column(String, default='kg')
-    is_available = Column(Boolean)
+    sku = Column(String(50), unique=True, nullable=True)
+    availability_status = Column(Enum(AvailabilityStatus), default=AvailabilityStatus.IN_STOCK)
     description = Column(Text)
     description_de = Column(Text)
     category_id = Column(Integer, ForeignKey("categories.id"))
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
 
     category = relationship("Category", back_populates="products")
+    farm = relationship("Farm", back_populates="products")
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.farm.name if self.farm else 'No Farm'})"
 
 class Category(Base):
     __tablename__ = "categories"
