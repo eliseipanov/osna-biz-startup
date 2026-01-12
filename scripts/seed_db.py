@@ -7,9 +7,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from core.database import async_session
 from core.models import Product, Category
+from sqlalchemy import text
 
 async def seed():
     async with async_session() as session:
+        # Hard reset: truncate tables
+        await session.execute(text("TRUNCATE categories, products RESTART IDENTITY CASCADE;"))
+        await session.commit()
+
         # Create categories first
         categories_data = [
             {"name": "Schwein", "slug": "schwein", "description": "Pork products from Homeyer"},
@@ -73,10 +78,10 @@ async def seed():
 
         try:
             await session.commit()
-            print(f"✅ Готово! Додано {len(categories_data)} категорій та {len(products_data)} продуктів до бази.")
+            print(f"✅ Database reset complete! Added {len(categories_data)} categories and {len(products_data)} products.")
         except Exception as e:
             await session.rollback()
-            print(f"❌ Помилка: {e}")
+            print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
     asyncio.run(seed())

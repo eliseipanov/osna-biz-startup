@@ -50,6 +50,9 @@ class Category(Base):
 
     products = relationship("Product", back_populates="category")
 
+    def __str__(self):
+        return self.name
+
 class Order(Base):
     __tablename__ = "orders"
 
