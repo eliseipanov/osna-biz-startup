@@ -4,7 +4,10 @@ import sys
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flask import Flask, redirect, url_for, flash
+from flask import Flask, redirect, url_for, flash, request
+import asyncio
+import tempfile
+import os
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin
 from flask_admin.contrib.sqla import ModelView
@@ -63,6 +66,7 @@ class SecureModelView(ModelView):
 class ProductView(SecureModelView):
     column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm', 'image_path')
     column_display_pk = True
+    can_export = True
     column_labels = {
         'id': 'ID',
         'name': 'Назва (Укр)',
@@ -121,6 +125,7 @@ admin = Admin(app, name='Osna Farm Admin')
 
 # Add logout menu item
 admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
+admin.add_link(MenuLink(name='Імпорт продуктів з Excel', category='Продукти', url='/admin/import_products'))
 
 # Додаємо в'юхи правильно
 admin.add_view(UserView(User, db.session))
@@ -215,6 +220,53 @@ def login():
 def admin_logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/admin/import_products', methods=['GET', 'POST'])
+@login_required
+def import_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and file.filename.endswith('.xlsx'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                file.save(tmp.name)
+                try:
+                    from core.utils.excel_manager import import_products_from_excel
+                    result = asyncio.run(import_products_from_excel(tmp.name))
+                    flash(f'Імпорт завершено: {result}')
+                except Exception as e:
+                    flash(f'Помилка імпорту: {str(e)}')
+                finally:
+                    os.unlink(tmp.name)
+        else:
+            flash('Будь ласка, виберіть файл .xlsx')
+        return redirect(url_for('product.index_view'))
+    return '''
+    <!DOCTYPE html>
+    <html lang="uk">
+    <head>
+        <meta charset="UTF-8">
+        <title>Імпорт продуктів з Excel</title>
+        <style>
+            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; }
+            form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
+            input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+            button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+            a { display: block; text-align: center; margin-top: 10px; color: #007bff; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <form method="POST" enctype="multipart/form-data">
+            <h3>Імпорт продуктів з Excel</h3>
+            <input type="file" name="file" accept=".xlsx" required>
+            <button type="submit">Імпортувати</button>
+        </form>
+        <a href="/admin/product">Повернутися до продуктів</a>
+    </body>
+    </html>
+    '''
 
 @app.errorhandler(404)
 def page_not_found(e):
