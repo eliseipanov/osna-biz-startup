@@ -5,3 +5,5 @@ alembic
 python-dotenv
 flask
 pydantic
+Flask-Admin
+psycopg2-binary
