@@ -4,7 +4,7 @@ import sys
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flask import Flask, redirect, url_for, flash, request, render_template
+from flask import Flask, redirect, url_for, flash, request, render_template, send_file
 import asyncio
 import tempfile
 import os
@@ -66,7 +66,7 @@ class SecureModelView(ModelView):
 class ProductView(SecureModelView):
     column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm', 'image_path')
     column_display_pk = True
-    can_export = True
+    # can_export = True  # Disabled to use custom XLSX export
     column_filters = ['category', 'farm', 'availability_status']
     column_searchable_list = ['name', 'sku']
     column_labels = {
@@ -89,7 +89,8 @@ class ProductView(SecureModelView):
     }
     extra_html = '''
     <div style="margin-bottom: 10px;">
-        <a href="/admin/import_products" class="btn btn-primary">Імпорт з Excel</a>
+        <a href="/admin/export_products" class="btn btn-success">Експорт в Excel</a>
+        <a href="/admin/import_products" class="btn btn-primary" style="margin-left: 10px;">Імпорт з Excel</a>
     </div>
     '''
 
@@ -207,6 +208,27 @@ def login():
 def admin_logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/admin/export_products')
+@login_required
+def export_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    import tempfile
+    import os
+    from core.utils.excel_manager import export_products_to_excel
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        try:
+            asyncio.run(export_products_to_excel(tmp.name))
+            return send_file(tmp.name, as_attachment=True, download_name='products.xlsx')
+        except Exception as e:
+            flash(f'Помилка експорту: {str(e)}')
+            return redirect(url_for('product.index_view'))
+        finally:
+            if os.path.exists(tmp.name):
+                os.unlink(tmp.name)
 
 @app.route('/admin/import_products', methods=['GET', 'POST'])
 @login_required

@@ -2,7 +2,7 @@
 
 ## 1. UI & Templates
 - Move all inline HTML from `admin/app.py` to `admin/templates/admin/`.
-- Create `admin/templates/admin/master.html` to override the Flask-Admin layout.
+- Create `admin/templates/admin/master.html` to override the Flask-Admin layout.                      -   FALSE !!!!!!!!!!!!!
 - Implement a Dark/Light mode toggle (Bootstrap 5.3) with `localStorage` persistence.
 - Add 50px image thumbnails to the Product list table.
 - Add sidebar filters (Category, Farm, Status) and search (Name, SKU).
