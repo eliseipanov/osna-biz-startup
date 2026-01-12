@@ -1,0 +1,9 @@
+{% extends 'admin/model/list.html' %}
+
+{% block model_list_table %}
+<div style="margin-bottom: 10px;">
+    <a href="/admin/export_products" class="btn btn-success">Експорт в Excel</a>
+    <a href="/admin/import_products" class="btn btn-primary" style="margin-left: 10px;">Імпорт з Excel</a>
+</div>
+{{ super() }}
+{% endblock %}

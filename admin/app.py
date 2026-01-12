@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Flask, redirect, url_for, flash, request, render_template, send_file
-import asyncio
+from markupsafe import Markup
 import tempfile
 import os
 from flask_sqlalchemy import SQLAlchemy
@@ -73,6 +73,7 @@ class ProductView(SecureModelView):
     # can_export = True  # Disabled to use custom XLSX export
     column_filters = ['category', 'farm', 'availability_status']
     column_searchable_list = ['name', 'sku']
+    list_template = 'admin/model/product_list.html'
     column_labels = {
         'id': 'ID',
         'name': 'Назва (Укр)',
@@ -86,17 +87,11 @@ class ProductView(SecureModelView):
         'image_path': 'Зображення'
     }
     column_formatters = {
-        'image_path': lambda v, c, m, p: f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">' if m.image_path else 'No image'
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
         'image_path': FileUploadField('Зображення', base_path='static/uploads')
     }
-    extra_html = '''
-    <div style="margin-bottom: 10px;">
-        <a href="/admin/export_products" class="btn btn-success">Експорт в Excel</a>
-        <a href="/admin/import_products" class="btn btn-primary" style="margin-left: 10px;">Імпорт з Excel</a>
-    </div>
-    '''
 
 # Кастомна в'юха для категорій
 class CategoryView(SecureModelView):
@@ -109,6 +104,9 @@ class CategoryView(SecureModelView):
         'description': 'Опис (Укр)',
         'description_de': 'Опис (Нім)',
         'image_path': 'Шлях до зображення'
+    }
+    column_formatters = {
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
         'image_path': FileUploadField('Зображення', base_path='static/uploads')
@@ -125,6 +123,9 @@ class FarmView(SecureModelView):
         'contact_info': 'Контактна інформація',
         'is_active': 'Активний',
         'image_path': 'Шлях до зображення'
+    }
+    column_formatters = {
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
         'image_path': FileUploadField('Зображення', base_path='static/uploads')
@@ -227,11 +228,11 @@ def export_products():
         return redirect(url_for('admin.index'))
     import tempfile
     import os
-    from core.utils.excel_manager import export_products_to_excel
+    from core.utils.excel_manager import export_products_to_excel_sync
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         try:
-            asyncio.run(export_products_to_excel(tmp.name))
+            export_products_to_excel_sync(db.session, tmp.name)
             return send_file(tmp.name, as_attachment=True, download_name='products.xlsx')
         except Exception as e:
             flash(f'Помилка експорту: {str(e)}')
@@ -252,8 +253,8 @@ def import_products():
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
                 file.save(tmp.name)
                 try:
-                    from core.utils.excel_manager import import_products_from_excel
-                    result = asyncio.run(import_products_from_excel(tmp.name))
+                    from core.utils.excel_manager import import_products_from_excel_sync
+                    result = import_products_from_excel_sync(db.session, tmp.name)
                     flash(f'Імпорт завершено: {result}')
                 except Exception as e:
                     flash(f'Помилка імпорту: {str(e)}')
