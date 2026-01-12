@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Імпорт продуктів з Excel</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; }
+        form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        a { display: block; text-align: center; margin-top: 10px; color: #007bff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <form method="POST" enctype="multipart/form-data">
+        <h3>Імпорт продуктів з Excel</h3>
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">Імпортувати</button>
+    </form>
+    <a href="{{ url_for('product.index_view') }}">Повернутися до продуктів</a>
+</body>
+</html>

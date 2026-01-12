@@ -4,7 +4,7 @@ import sys
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flask import Flask, redirect, url_for, flash, request
+from flask import Flask, redirect, url_for, flash, request, render_template
 import asyncio
 import tempfile
 import os
@@ -67,6 +67,8 @@ class ProductView(SecureModelView):
     column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'category', 'farm', 'image_path')
     column_display_pk = True
     can_export = True
+    column_filters = ['category', 'farm', 'availability_status']
+    column_searchable_list = ['name', 'sku']
     column_labels = {
         'id': 'ID',
         'name': 'Назва (Укр)',
@@ -77,11 +79,19 @@ class ProductView(SecureModelView):
         'availability_status': 'Статус наявності',
         'category': 'Категорія',
         'farm': 'Ферма/Виробник',
-        'image_path': 'Шлях до зображення'
+        'image_path': 'Зображення'
+    }
+    column_formatters = {
+        'image_path': lambda v, c, m, p: f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">' if m.image_path else 'No image'
     }
     form_extra_fields = {
         'image_path': FileUploadField('Зображення', base_path='static/uploads')
     }
+    extra_html = '''
+    <div style="margin-bottom: 10px;">
+        <a href="/admin/import_products" class="btn btn-primary">Імпорт з Excel</a>
+    </div>
+    '''
 
 # Кастомна в'юха для категорій
 class CategoryView(SecureModelView):
@@ -125,7 +135,6 @@ admin = Admin(app, name='Osna Farm Admin')
 
 # Add logout menu item
 admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
-admin.add_link(MenuLink(name='Імпорт продуктів з Excel', category='Продукти', url='/admin/import_products'))
 
 # Додаємо в'юхи правильно
 admin.add_view(UserView(User, db.session))
@@ -191,29 +200,7 @@ def login():
             else:
                 print("User not found")
                 flash('User not found')
-    return f'''
-    <!DOCTYPE html>
-    <html lang="uk">
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; }}
-            form {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 90%; max-width: 320px; }}
-            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }}
-            button {{ width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }}
-        </style>
-    </head>
-    <body>
-        <form method="POST">
-            {form.csrf_token()}
-            <h3>Osna Farm Admin</h3>
-            {form.username(placeholder="Email or Username")}
-            {form.password(placeholder="Password")}
-            <button type="submit">Log In</button>
-        </form>
-    </body>
-    </html>
-    '''
+    return render_template('admin/login.html', form=form)
 
 @app.route('/admin/logout')
 @login_required
@@ -243,30 +230,7 @@ def import_products():
         else:
             flash('Будь ласка, виберіть файл .xlsx')
         return redirect(url_for('product.index_view'))
-    return '''
-    <!DOCTYPE html>
-    <html lang="uk">
-    <head>
-        <meta charset="UTF-8">
-        <title>Імпорт продуктів з Excel</title>
-        <style>
-            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f4f4f4; }
-            form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 90%; max-width: 400px; }
-            input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-            button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
-            a { display: block; text-align: center; margin-top: 10px; color: #007bff; text-decoration: none; }
-        </style>
-    </head>
-    <body>
-        <form method="POST" enctype="multipart/form-data">
-            <h3>Імпорт продуктів з Excel</h3>
-            <input type="file" name="file" accept=".xlsx" required>
-            <button type="submit">Імпортувати</button>
-        </form>
-        <a href="/admin/product">Повернутися до продуктів</a>
-    </body>
-    </html>
-    '''
+    return render_template('admin/import_products.html')
 
 @app.errorhandler(404)
 def page_not_found(e):

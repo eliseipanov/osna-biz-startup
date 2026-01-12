@@ -32,57 +32,86 @@ async def export_products_to_excel(file_path: str):
         return f"Exported {len(products)} products to {file_path}"
 
 async def import_products_from_excel(file_path: str):
-    """Import products from Excel file, updating existing or creating new."""
+    """Import products from Excel file with atomic transactions and detailed report."""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File {file_path} not found")
 
     df = pd.read_excel(file_path)
 
     async with async_session() as session:
-        updated = 0
-        created = 0
+        report = []
+        success_count = 0
 
-        for _, row in df.iterrows():
-            product_id = row.get('id')
-            name = row.get('name')
+        # Use nested transaction for atomicity
+        async with session.begin_nested():
+            try:
+                for index, row in df.iterrows():
+                    row_num = index + 2  # Assuming header is row 1
+                    product_id = row.get('id')
+                    sku = row.get('sku')
+                    name = row.get('name')
 
-            if pd.isna(product_id) and pd.isna(name):
-                continue  # Skip invalid rows
+                    # Skip invalid rows
+                    if pd.isna(product_id) and pd.isna(sku) and pd.isna(name):
+                        report.append(f"Row {row_num}: Skipped - no ID, SKU, or Name")
+                        continue
 
-            # Try to find existing product by ID or name
-            existing_product = None
-            if not pd.isna(product_id):
-                existing_product = await session.execute(select(Product).where(Product.id == int(product_id)))
-                existing_product = existing_product.scalar_one_or_none()
-            if not existing_product and not pd.isna(name):
-                existing_product = await session.execute(select(Product).where(Product.name == str(name)))
-                existing_product = existing_product.scalar_one_or_none()
+                    # Find existing product: by id first, then by sku
+                    existing_product = None
+                    if not pd.isna(product_id):
+                        existing_product = await session.execute(select(Product).where(Product.id == int(product_id)))
+                        existing_product = existing_product.scalar_one_or_none()
+                    if not existing_product and not pd.isna(sku):
+                        existing_product = await session.execute(select(Product).where(Product.sku == str(sku)))
+                        existing_product = existing_product.scalar_one_or_none()
 
-            if existing_product:
-                # Update existing
-                existing_product.name_de = row.get('name_de') if not pd.isna(row.get('name_de')) else existing_product.name_de
-                existing_product.price = float(row.get('price')) if not pd.isna(row.get('price')) else existing_product.price
-                existing_product.unit = row.get('unit') if not pd.isna(row.get('unit')) else existing_product.unit
-                existing_product.sku = row.get('sku') if not pd.isna(row.get('sku')) else existing_product.sku
-                existing_product.description = row.get('description') if not pd.isna(row.get('description')) else existing_product.description
-                existing_product.description_de = row.get('description_de') if not pd.isna(row.get('description_de')) else existing_product.description_de
-                existing_product.image_path = row.get('image_path') if not pd.isna(row.get('image_path')) else existing_product.image_path
-                # Note: category and farm not updated for simplicity
-                updated += 1
-            else:
-                # Create new (basic, without category/farm for now)
-                new_product = Product(
-                    name=str(name),
-                    name_de=row.get('name_de') if not pd.isna(row.get('name_de')) else None,
-                    price=float(row.get('price')) if not pd.isna(row.get('price')) else 0.0,
-                    unit=row.get('unit') if not pd.isna(row.get('unit')) else 'kg',
-                    sku=row.get('sku') if not pd.isna(row.get('sku')) else None,
-                    description=row.get('description') if not pd.isna(row.get('description')) else None,
-                    description_de=row.get('description_de') if not pd.isna(row.get('description_de')) else None,
-                    image_path=row.get('image_path') if not pd.isna(row.get('image_path')) else None
-                )
-                session.add(new_product)
-                created += 1
+                    try:
+                        if existing_product:
+                            # Update existing
+                            if not pd.isna(row.get('name')):
+                                existing_product.name = str(row.get('name'))
+                            if not pd.isna(row.get('name_de')):
+                                existing_product.name_de = str(row.get('name_de'))
+                            if not pd.isna(row.get('price')):
+                                existing_product.price = float(row.get('price'))
+                            if not pd.isna(row.get('unit')):
+                                existing_product.unit = str(row.get('unit'))
+                            if not pd.isna(row.get('sku')):
+                                existing_product.sku = str(row.get('sku'))
+                            if not pd.isna(row.get('description')):
+                                existing_product.description = str(row.get('description'))
+                            if not pd.isna(row.get('description_de')):
+                                existing_product.description_de = str(row.get('description_de'))
+                            if not pd.isna(row.get('image_path')):
+                                existing_product.image_path = str(row.get('image_path'))
+                            report.append(f"Row {row_num}: Updated product {existing_product.name}")
+                        else:
+                            # Create new
+                            if pd.isna(name):
+                                raise ValueError("Name is required for new products")
+                            new_product = Product(
+                                name=str(name),
+                                name_de=str(row.get('name_de')) if not pd.isna(row.get('name_de')) else None,
+                                price=float(row.get('price')) if not pd.isna(row.get('price')) else 0.0,
+                                unit=str(row.get('unit')) if not pd.isna(row.get('unit')) else 'kg',
+                                sku=str(row.get('sku')) if not pd.isna(row.get('sku')) else None,
+                                description=str(row.get('description')) if not pd.isna(row.get('description')) else None,
+                                description_de=str(row.get('description_de')) if not pd.isna(row.get('description_de')) else None,
+                                image_path=str(row.get('image_path')) if not pd.isna(row.get('image_path')) else None
+                            )
+                            session.add(new_product)
+                            report.append(f"Row {row_num}: Created new product {name}")
+                        success_count += 1
+                    except Exception as e:
+                        report.append(f"Row {row_num}: Error - {str(e)}")
+                        raise  # Rollback the nested transaction
 
-        await session.commit()
-        return f"Imported: {created} created, {updated} updated"
+                # If no errors, commit the nested transaction
+                await session.commit()
+                report.insert(0, f"Import successful: {success_count} rows processed")
+            except Exception:
+                # Rollback will happen automatically
+                report.insert(0, "Import failed: rolled back all changes")
+                raise
+
+        return "\n".join(report)
