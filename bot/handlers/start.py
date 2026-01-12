@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from core.database import async_session
 from core.models import User
+from bot.keyboards.main_menu import get_main_menu_keyboard
 
 async def start_handler(message: Message):
     tg_id = message.from_user.id
@@ -18,7 +19,7 @@ async def start_handler(message: Message):
             session.add(user)
         await session.commit()
 
-    await message.reply(f"Привіт, {full_name}! Вітаємо в Osnabrück Farm Connect. Реєстрація успішна.")
+    await message.answer("Вітаємо в Osnabrück Farm Connect! Оберіть розділ нижче 👇", reply_markup=get_main_menu_keyboard())
 
 def register_start_handlers(dp: Dispatcher):
     dp.message.register(start_handler, Command("start"))
