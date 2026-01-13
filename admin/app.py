@@ -1,5 +1,7 @@
 import os
 import sys
+import traceback
+from datetime import datetime
 
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -73,6 +75,8 @@ class ProductView(SecureModelView):
     # can_export = True  # Disabled to use custom XLSX export
     column_filters = ['category', 'farm', 'availability_status']
     column_searchable_list = ['name', 'sku']
+    column_sortable_list = ['id', 'name', 'sku', 'price', 'availability_status', ('category', 'category.name'), ('farm', 'farm.name')]
+    column_editable_list = ['price', 'availability_status', 'unit']
     list_template = 'admin/model/product_list.html'
     column_labels = {
         'id': 'ID',
@@ -87,6 +91,7 @@ class ProductView(SecureModelView):
         'image_path': 'Зображення'
     }
     column_formatters = {
+        'price': lambda v, c, m, p: f"{m.price:.2f} €".replace('.', ',') if m.price else '0,00 €',
         'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
@@ -229,17 +234,29 @@ def export_products():
     import tempfile
     import os
     from core.utils.excel_manager import export_products_to_excel_sync
+    from sqlalchemy import select
+
+    # Build filtered query based on request.args (Flask-Admin filter format)
+    query = select(Product)
+    if 'flt0_category' in request.args and request.args['flt0_category']:
+        query = query.where(Product.category_id == int(request.args['flt0_category']))
+    if 'flt1_farm' in request.args and request.args['flt1_farm']:
+        query = query.where(Product.farm_id == int(request.args['flt1_farm']))
+    if 'flt2_availability_status' in request.args and request.args['flt2_availability_status']:
+        from core.models import AvailabilityStatus
+        query = query.where(Product.availability_status == AvailabilityStatus(request.args['flt2_availability_status']))
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         try:
-            export_products_to_excel_sync(db.session, tmp.name)
-            return send_file(tmp.name, as_attachment=True, download_name='products.xlsx')
+            export_products_to_excel_sync(db.session, tmp.name, query=query)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            filename = f"products_{timestamp}.xlsx"
+            return send_file(tmp.name, as_attachment=True, download_name=filename)
         except Exception as e:
+            print(f"Export error: {str(e)}")
+            traceback.print_exc()
             flash(f'Помилка експорту: {str(e)}')
             return redirect(url_for('product.index_view'))
-        finally:
-            if os.path.exists(tmp.name):
-                os.unlink(tmp.name)
 
 @app.route('/admin/import_products', methods=['GET', 'POST'])
 @login_required

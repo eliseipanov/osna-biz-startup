@@ -7,13 +7,20 @@ from core.models import Product, Category, Farm, AvailabilityStatus
 def safe_encode_for_sql_ascii(value):
     """Handle SQL_ASCII encoding to prevent mojibake in Excel export."""
     if value and isinstance(value, str) and any(ord(c) > 127 for c in value):
-        return value.encode('latin-1').decode('utf-8')
+        try:
+            encoded = value.encode('latin-1')
+            return encoded.decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            # If encoding/decoding fails, return as is
+            return value
     return value
 
 # Sync versions for Flask-Admin
-def export_products_to_excel_sync(db_session, file_path: str):
-    """Sync version for Flask-Admin: Export all products to an Excel file."""
-    result = db_session.execute(select(Product))
+def export_products_to_excel_sync(db_session, file_path: str, query=None):
+    """Sync version for Flask-Admin: Export products to an Excel file."""
+    if query is None:
+        query = select(Product)
+    result = db_session.execute(query)
     products = result.scalars().all()
 
     data = []
