@@ -2,7 +2,13 @@ import pandas as pd
 import os
 from sqlalchemy import select
 from core.database import async_session
-from core.models import Product, Category, Farm
+from core.models import Product, Category, Farm, AvailabilityStatus
+
+def safe_encode_for_sql_ascii(value):
+    """Handle SQL_ASCII encoding to prevent mojibake in Excel export."""
+    if value and isinstance(value, str) and any(ord(c) > 127 for c in value):
+        return value.encode('latin-1').decode('utf-8')
+    return value
 
 # Sync versions for Flask-Admin
 def export_products_to_excel_sync(db_session, file_path: str):
@@ -14,16 +20,16 @@ def export_products_to_excel_sync(db_session, file_path: str):
     for p in products:
         data.append({
             'id': p.id,
-            'name': p.name,
-            'name_de': p.name_de,
+            'name': safe_encode_for_sql_ascii(p.name),
+            'name_de': safe_encode_for_sql_ascii(p.name_de),
             'price': p.price,
             'unit': p.unit,
             'sku': p.sku,
             'availability_status': p.availability_status.value if p.availability_status else None,
-            'description': p.description,
-            'description_de': p.description_de,
-            'category_name': p.category.name if p.category else None,
-            'farm_name': p.farm.name if p.farm else None,
+            'description': safe_encode_for_sql_ascii(p.description),
+            'description_de': safe_encode_for_sql_ascii(p.description_de),
+            'category_name': safe_encode_for_sql_ascii(p.category.name) if p.category else None,
+            'farm_name': safe_encode_for_sql_ascii(p.farm.name) if p.farm else None,
             'image_path': p.image_path
         })
 
@@ -81,6 +87,17 @@ def import_products_from_excel_sync(db_session, file_path: str):
                             existing_product.description_de = str(row.get('description_de'))
                         if not pd.isna(row.get('image_path')):
                             existing_product.image_path = str(row.get('image_path'))
+                        if not pd.isna(row.get('availability_status')):
+                            existing_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
+                        # Link relationships by name
+                        if not pd.isna(row.get('category_name')):
+                            category = db_session.execute(select(Category).where(Category.name == str(row.get('category_name')))).scalar_one_or_none()
+                            if category:
+                                existing_product.category_id = category.id
+                        if not pd.isna(row.get('farm_name')):
+                            farm = db_session.execute(select(Farm).where(Farm.name == str(row.get('farm_name')))).scalar_one_or_none()
+                            if farm:
+                                existing_product.farm_id = farm.id
                         report.append(f"Row {row_num}: Updated product {existing_product.name}")
                     else:
                         # Create new
@@ -96,6 +113,18 @@ def import_products_from_excel_sync(db_session, file_path: str):
                             description_de=str(row.get('description_de')) if not pd.isna(row.get('description_de')) else None,
                             image_path=str(row.get('image_path')) if not pd.isna(row.get('image_path')) else None
                         )
+                        # Set availability_status if provided
+                        if not pd.isna(row.get('availability_status')):
+                            new_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
+                        # Link relationships by name
+                        if not pd.isna(row.get('category_name')):
+                            category = db_session.execute(select(Category).where(Category.name == str(row.get('category_name')))).scalar_one_or_none()
+                            if category:
+                                new_product.category_id = category.id
+                        if not pd.isna(row.get('farm_name')):
+                            farm = db_session.execute(select(Farm).where(Farm.name == str(row.get('farm_name')))).scalar_one_or_none()
+                            if farm:
+                                new_product.farm_id = farm.id
                         db_session.add(new_product)
                         report.append(f"Row {row_num}: Created new product {name}")
                     success_count += 1
@@ -123,16 +152,16 @@ async def export_products_to_excel(file_path: str):
         for p in products:
             data.append({
                 'id': p.id,
-                'name': p.name,
-                'name_de': p.name_de,
+                'name': safe_encode_for_sql_ascii(p.name),
+                'name_de': safe_encode_for_sql_ascii(p.name_de),
                 'price': p.price,
                 'unit': p.unit,
                 'sku': p.sku,
                 'availability_status': p.availability_status.value if p.availability_status else None,
-                'description': p.description,
-                'description_de': p.description_de,
-                'category_name': p.category.name if p.category else None,
-                'farm_name': p.farm.name if p.farm else None,
+                'description': safe_encode_for_sql_ascii(p.description),
+                'description_de': safe_encode_for_sql_ascii(p.description_de),
+                'category_name': safe_encode_for_sql_ascii(p.category.name) if p.category else None,
+                'farm_name': safe_encode_for_sql_ascii(p.farm.name) if p.farm else None,
                 'image_path': p.image_path
             })
 
@@ -193,7 +222,20 @@ async def import_products_from_excel(file_path: str):
                                 existing_product.description_de = str(row.get('description_de'))
                             if not pd.isna(row.get('image_path')):
                                 existing_product.image_path = str(row.get('image_path'))
-                            report.append(f"Row {row_num}: Updated product {existing_product.name}")
+                            if not pd.isna(row.get('availability_status')):
+                                existing_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
+                            # Link relationships by name
+                            if not pd.isna(row.get('category_name')):
+                                category = await session.execute(select(Category).where(Category.name == str(row.get('category_name'))))
+                                category = category.scalar_one_or_none()
+                                if category:
+                                    existing_product.category_id = category.id
+                            if not pd.isna(row.get('farm_name')):
+                                farm = await session.execute(select(Farm).where(Farm.name == str(row.get('farm_name'))))
+                                farm = farm.scalar_one_or_none()
+                                if farm:
+                                    existing_product.farm_id = farm.id
+                                report.append(f"Row {row_num}: Updated product {existing_product.name}")
                         else:
                             # Create new
                             if pd.isna(name):
@@ -208,8 +250,22 @@ async def import_products_from_excel(file_path: str):
                                 description_de=str(row.get('description_de')) if not pd.isna(row.get('description_de')) else None,
                                 image_path=str(row.get('image_path')) if not pd.isna(row.get('image_path')) else None
                             )
-                            session.add(new_product)
-                            report.append(f"Row {row_num}: Created new product {name}")
+                            # Set availability_status if provided
+                            if not pd.isna(row.get('availability_status')):
+                                new_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
+                            # Link relationships by name
+                            if not pd.isna(row.get('category_name')):
+                                category = await session.execute(select(Category).where(Category.name == str(row.get('category_name'))))
+                                category = category.scalar_one_or_none()
+                                if category:
+                                    new_product.category_id = category.id
+                            if not pd.isna(row.get('farm_name')):
+                                farm = await session.execute(select(Farm).where(Farm.name == str(row.get('farm_name'))))
+                                farm = farm.scalar_one_or_none()
+                                if farm:
+                                    new_product.farm_id = farm.id
+                                session.add(new_product)
+                                report.append(f"Row {row_num}: Created new product {name}")
                         success_count += 1
                     except Exception as e:
                         report.append(f"Row {row_num}: Error - {str(e)}")
