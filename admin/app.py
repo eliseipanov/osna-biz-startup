@@ -75,7 +75,7 @@ class ProductView(SecureModelView):
     # can_export = True  # Disabled to use custom XLSX export
     column_filters = ['category', 'farm', 'availability_status']
     column_searchable_list = ['name', 'sku']
-    column_sortable_list = ['id', 'name', 'sku', 'price', 'availability_status', ('category', 'category.name'), ('farm', 'farm.name')]
+    column_sortable_list = ['id', 'name', 'name_de', 'sku', 'price', 'unit', 'availability_status', ('category', 'category.name'), ('farm', 'farm.name')]
     column_editable_list = ['price', 'availability_status', 'unit']
     list_template = 'admin/model/product_list.html'
     column_labels = {
@@ -234,21 +234,24 @@ def export_products():
     import tempfile
     import os
     from core.utils.excel_manager import export_products_to_excel_sync
-    from sqlalchemy import select
 
-    # Build filtered query based on request.args (Flask-Admin filter format)
-    query = select(Product)
-    if 'flt0_category' in request.args and request.args['flt0_category']:
-        query = query.where(Product.category_id == int(request.args['flt0_category']))
-    if 'flt1_farm' in request.args and request.args['flt1_farm']:
-        query = query.where(Product.farm_id == int(request.args['flt1_farm']))
-    if 'flt2_availability_status' in request.args and request.args['flt2_availability_status']:
-        from core.models import AvailabilityStatus
-        query = query.where(Product.availability_status == AvailabilityStatus(request.args['flt2_availability_status']))
+    # Get the filtered products from ProductView
+    product_view = None
+    for view in admin._views:
+        if hasattr(view, 'endpoint') and view.endpoint == 'product':
+            product_view = view
+            break
+    if product_view:
+        # Get arguments
+        v_args = product_view._get_list_extra_args()
+        # Fetch data
+        count, products = product_view.get_list(page=0, sort_column=v_args.sort, sort_desc=v_args.sort_desc, search=v_args.search, filters=v_args.filters, page_size=10000)
+    else:
+        products = None
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
         try:
-            export_products_to_excel_sync(db.session, tmp.name, query=query)
+            export_products_to_excel_sync(db.session, tmp.name, products=products)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M")
             filename = f"products_{timestamp}.xlsx"
             return send_file(tmp.name, as_attachment=True, download_name=filename)

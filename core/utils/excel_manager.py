@@ -16,12 +16,13 @@ def safe_encode_for_sql_ascii(value):
     return value
 
 # Sync versions for Flask-Admin
-def export_products_to_excel_sync(db_session, file_path: str, query=None):
+def export_products_to_excel_sync(db_session, file_path: str, query=None, products=None):
     """Sync version for Flask-Admin: Export products to an Excel file."""
-    if query is None:
-        query = select(Product)
-    result = db_session.execute(query)
-    products = result.scalars().all()
+    if products is None:
+        if query is None:
+            query = select(Product)
+        result = db_session.execute(query)
+        products = result.scalars().all()
 
     data = []
     for p in products:
