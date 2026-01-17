@@ -26,6 +26,13 @@ def get_localized_product_description(product: Product, language: str = "uk") ->
         return product.description_de
     return product.description or ""
 
+# Helper function to get localized category name
+def get_localized_category_name(category: Category, language: str = "uk") -> str:
+    """Get category name in user's language, fallback to Ukrainian if German not available."""
+    if language == "de" and category.name_de:
+        return category.name_de
+    return category.name or "Unnamed Category"
+
 # Helper function to check if orders are allowed
 
 def is_order_allowed():
@@ -50,26 +57,34 @@ async def show_categories(message: Message):
     """Handle catalog button clicks in both languages and show category selection."""
     try:
         async with async_session() as session:
+            # Get user language preference
+            user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
+            user_language = user.language_pref if user else "uk"
+
             # Get all categories
             categories = await session.scalars(select(Category))
             categories = categories.all()
 
             if not categories:
-                await message.answer("Категорії не знайдено.")
+                error_msg = "Категорії не знайдено." if user_language == "uk" else "Kategorien nicht gefunden."
+                await message.answer(error_msg)
                 return
 
-            # Create inline keyboard with categories
+            # Create inline keyboard with localized category names
             builder = InlineKeyboardBuilder()
             for category in categories:
+                category_name = get_localized_category_name(category, user_language)
                 builder.button(
-                    text=category.name,
+                    text=category_name,
                     callback_data=f"category_{category.id}"
                 )
 
             builder.adjust(2)  # 2 columns
 
+            header_text = "🥩 <b>Оберіть категорію:</b>" if user_language == "uk" else "🥩 <b>Wählen Sie eine Kategorie:</b>"
+
             await message.answer(
-                "🥩 <b>Оберіть категорію:</b>",
+                header_text,
                 reply_markup=builder.as_markup(),
                 parse_mode="HTML"
             )
@@ -283,26 +298,34 @@ async def decrease_quantity(callback: CallbackQuery):
 async def back_to_categories(callback: CallbackQuery):
     try:
         async with async_session() as session:
+            # Get user language preference
+            user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+            user_language = user.language_pref if user else "uk"
+
             # Get all categories
             categories = await session.scalars(select(Category))
             categories = categories.all()
-            
+
             if not categories:
-                await callback.answer("Категорії не знайдено.")
+                error_msg = "Категорії не знайдено." if user_language == "uk" else "Kategorien nicht gefunden."
+                await callback.answer(error_msg)
                 return
-            
-            # Create inline keyboard with categories
+
+            # Create inline keyboard with localized category names
             builder = InlineKeyboardBuilder()
             for category in categories:
+                category_name = get_localized_category_name(category, user_language)
                 builder.button(
-                    text=category.name,
+                    text=category_name,
                     callback_data=f"category_{category.id}"
                 )
-            
+
             builder.adjust(2)  # 2 columns
-            
+
+            header_text = "🥩 <b>Оберіть категорію:</b>" if user_language == "uk" else "🥩 <b>Wählen Sie eine Kategorie:</b>"
+
             await callback.message.edit_text(
-                "🥩 <b>Оберіть категорію:</b>",
+                header_text,
                 reply_markup=builder.as_markup(),
                 parse_mode="HTML"
             )
