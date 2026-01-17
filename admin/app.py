@@ -21,6 +21,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,7 +31,8 @@ load_dotenv()
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
 
-app.config['SECRET_KEY'] = os.getenv("BOT_TOKEN", "dev-secret")
+app.config['SECRET_KEY'] = os.getenv("SECRET_KEY")
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB limit
 
 # Налаштування бази
 DATABASE_URL = os.getenv("DATABASE_URL").replace("postgresql+asyncpg", "postgresql")
@@ -48,6 +51,8 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+limiter = Limiter(get_remote_address, app=app)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -114,7 +119,7 @@ class CategoryView(SecureModelView):
         'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
-        'image_path': FileUploadField('Зображення', base_path='static/uploads')
+        'image_path': FileUploadField('Зображення', base_path='static/uploads', allowed_extensions=['jpg', 'jpeg', 'png', 'gif'])
     }
 
 # Кастомна в'юха для ферм
@@ -133,7 +138,7 @@ class FarmView(SecureModelView):
         'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
     }
     form_extra_fields = {
-        'image_path': FileUploadField('Зображення', base_path='static/uploads')
+        'image_path': FileUploadField('Зображення', base_path='static/uploads', allowed_extensions=['jpg', 'jpeg', 'png', 'gif'])
     }
 
 # Кастомна в'юха для користувачів
@@ -164,6 +169,7 @@ admin.add_view(SecureModelView(GlobalSettings, db.session))
 admin.add_view(SecureModelView(Translation, db.session))
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per 15 minutes")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('admin.index'))
@@ -321,4 +327,4 @@ if __name__ == '__main__':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
     print("🚀 Running on http://localhost:5000/admin")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

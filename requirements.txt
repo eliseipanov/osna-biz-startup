@@ -9,6 +9,9 @@ Flask-Admin
 psycopg2-binary
 Flask-Login
 flask-wtf
+flask-limiter
 email-validator
 openpyxl
 pandas
+pytest
+pytest-asyncio

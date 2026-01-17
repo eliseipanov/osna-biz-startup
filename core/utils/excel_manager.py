@@ -77,24 +77,34 @@ def import_products_from_excel_sync(db_session, file_path: str):
                     existing_product = db_session.execute(select(Product).where(Product.sku == str(sku))).scalar_one_or_none()
 
                 try:
+                    # Validation
+                    name_val = str(row.get('name')).strip() if not pd.isna(row.get('name')) else None
+                    if not name_val:
+                        raise ValueError("Name cannot be empty")
+                    price_val = float(row.get('price')) if not pd.isna(row.get('price')) else 0.0
+                    if price_val < 0:
+                        raise ValueError("Price cannot be negative")
+                    unit_val = str(row.get('unit')).strip() if not pd.isna(row.get('unit')) else 'kg'
+                    if not unit_val:
+                        raise ValueError("Unit cannot be empty")
+                    sku_val = str(row.get('sku')).strip() if not pd.isna(row.get('sku')) else None
+                    if sku_val and len(sku_val) > 50:
+                        raise ValueError("SKU cannot be longer than 50 characters")
+
                     if existing_product:
                         # Update existing
-                        if not pd.isna(row.get('name')):
-                            existing_product.name = str(row.get('name'))
+                        existing_product.name = name_val
                         if not pd.isna(row.get('name_de')):
-                            existing_product.name_de = str(row.get('name_de'))
-                        if not pd.isna(row.get('price')):
-                            existing_product.price = float(row.get('price'))
-                        if not pd.isna(row.get('unit')):
-                            existing_product.unit = str(row.get('unit'))
-                        if not pd.isna(row.get('sku')):
-                            existing_product.sku = str(row.get('sku'))
+                            existing_product.name_de = str(row.get('name_de')).strip()
+                        existing_product.price = price_val
+                        existing_product.unit = unit_val
+                        existing_product.sku = sku_val
                         if not pd.isna(row.get('description')):
-                            existing_product.description = str(row.get('description'))
+                            existing_product.description = str(row.get('description')).strip()
                         if not pd.isna(row.get('description_de')):
-                            existing_product.description_de = str(row.get('description_de'))
+                            existing_product.description_de = str(row.get('description_de')).strip()
                         if not pd.isna(row.get('image_path')):
-                            existing_product.image_path = str(row.get('image_path'))
+                            existing_product.image_path = str(row.get('image_path')).strip()
                         if not pd.isna(row.get('availability_status')):
                             existing_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
                         # Link relationships by name
@@ -109,17 +119,15 @@ def import_products_from_excel_sync(db_session, file_path: str):
                         report.append(f"Row {row_num}: Updated product {existing_product.name}")
                     else:
                         # Create new
-                        if pd.isna(name):
-                            raise ValueError("Name is required for new products")
                         new_product = Product(
-                            name=str(name),
-                            name_de=str(row.get('name_de')) if not pd.isna(row.get('name_de')) else None,
-                            price=float(row.get('price')) if not pd.isna(row.get('price')) else 0.0,
-                            unit=str(row.get('unit')) if not pd.isna(row.get('unit')) else 'kg',
-                            sku=str(row.get('sku')) if not pd.isna(row.get('sku')) else None,
-                            description=str(row.get('description')) if not pd.isna(row.get('description')) else None,
-                            description_de=str(row.get('description_de')) if not pd.isna(row.get('description_de')) else None,
-                            image_path=str(row.get('image_path')) if not pd.isna(row.get('image_path')) else None
+                            name=name_val,
+                            name_de=str(row.get('name_de')).strip() if not pd.isna(row.get('name_de')) else None,
+                            price=price_val,
+                            unit=unit_val,
+                            sku=sku_val,
+                            description=str(row.get('description')).strip() if not pd.isna(row.get('description')) else None,
+                            description_de=str(row.get('description_de')).strip() if not pd.isna(row.get('description_de')) else None,
+                            image_path=str(row.get('image_path')).strip() if not pd.isna(row.get('image_path')) else None
                         )
                         # Set availability_status if provided
                         if not pd.isna(row.get('availability_status')):

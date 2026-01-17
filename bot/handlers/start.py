@@ -15,11 +15,15 @@ async def start_handler(message: Message):
     tg_id = message.from_user.id
     full_name = message.from_user.full_name
 
-    async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
-        if user is None:
-            user = User(tg_id=tg_id, full_name=full_name)
-            session.add(user)
-            await session.commit()
+    try:
+        async with async_session() as session:
+            user = await session.scalar(select(User).where(User.tg_id == tg_id))
+            if user is None:
+                user = User(tg_id=tg_id, full_name=full_name)
+                session.add(user)
+                await session.commit()
+    except Exception as e:
+        await message.answer("Сталася помилка при реєстрації. Спробуйте ще раз.")
+        return
 
     await message.answer("Вітаємо в Osnabrück Farm Connect! Оберіть розділ нижче 👇", reply_markup=get_main_menu_keyboard())
