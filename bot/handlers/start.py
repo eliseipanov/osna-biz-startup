@@ -8,8 +8,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 
 from core.database import async_session
-from core.models import User, StaticPage
+from core.models import User, StaticPage, Translation
 from bot.keyboards.main_menu import get_main_menu_keyboard
+from bot.utils import TranslationFilter, get_translation
 
 router = Router()
 
@@ -17,7 +18,8 @@ router = Router()
 class OnboardingStates(StatesGroup):
     waiting_for_language = State()
     waiting_for_agreement = State()
-    waiting_for_name = State()
+    waiting_for_name_confirmation = State()
+    waiting_for_name_input = State()
     waiting_for_phone = State()
 
 @router.message(Command("start"))
@@ -31,7 +33,9 @@ async def start_handler(message: Message, state: FSMContext):
 
             # If user exists and has completed onboarding (has phone), show main menu
             if user and user.phone:
-                await message.answer("Вітаємо в Osnabrück Farm Connect! Оберіть розділ нижче 👇", reply_markup=get_main_menu_keyboard())
+                main_menu = await get_main_menu_keyboard(user.language_pref or "uk")
+                welcome_text = await get_translation("welcome_message", user.language_pref or "uk")
+                await message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
                 return
 
             # Start onboarding flow for new users or incomplete profiles
@@ -59,6 +63,27 @@ async def start_handler(message: Message, state: FSMContext):
 async def process_language(callback: CallbackQuery, state: FSMContext):
     language = callback.data.split("_")[1]  # "uk" or "de"
     await state.update_data(language_pref=language)
+
+    # Save language preference immediately to database
+    data = await state.get_data()
+    try:
+        async with async_session() as session:
+            # Get or create user
+            user = await session.scalar(select(User).where(User.tg_id == data["tg_id"]))
+
+            if not user:
+                user = User(
+                    tg_id=data["tg_id"],
+                    full_name=data["full_name"]
+                )
+                session.add(user)
+
+            # Save language preference immediately
+            user.language_pref = language
+            await session.commit()
+    except Exception as e:
+        # Continue with onboarding even if DB save fails
+        pass
 
     # Show legal agreement
     if language == "uk":
@@ -104,6 +129,53 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
 async def process_agreement(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     language = data.get("language_pref", "uk")
+    telegram_name = data.get("full_name", "User")
+
+    # Show success message and suggest Telegram name
+    if language == "uk":
+        text = (
+            "✅ <b>Дякуємо за згоду!</b>\n\n"
+            f"👤 Ми бачимо вас як: <b>{telegram_name}</b>\n\n"
+            "Використовувати це ім'я для замовлень?"
+        )
+        yes_text = "✅ Так, використовувати це ім'я"
+        change_text = "✏️ Змінити ім'я"
+    else:
+        text = (
+            "✅ <b>Vielen Dank für Ihre Zustimmung!</b>\n\n"
+            f"👤 Wir sehen Sie als: <b>{telegram_name}</b>\n\n"
+            "Dieses Namen für Bestellungen verwenden?"
+        )
+        yes_text = "✅ Ja, diesen Namen verwenden"
+        change_text = "✏️ Namen ändern"
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text=yes_text, callback_data="name_yes")
+    builder.button(text=change_text, callback_data="name_change")
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await state.set_state(OnboardingStates.waiting_for_name_confirmation)
+    await callback.answer()
+
+# Name confirmation handlers
+@router.callback_query(OnboardingStates.waiting_for_name_confirmation, F.data == "name_yes")
+async def process_name_yes(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    telegram_name = data.get("full_name", "User")
+
+    # Use Telegram name
+    await state.update_data(real_name=telegram_name)
+    await proceed_to_phone(callback.message, state)
+    await callback.answer()
+
+@router.callback_query(OnboardingStates.waiting_for_name_confirmation, F.data == "name_change")
+async def process_name_change(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    language = data.get("language_pref", "uk")
 
     if language == "uk":
         text = "👤 <b>Введіть ваше справжнє ім'я та прізвище:</b>\n\nНаприклад: Іван Петренко"
@@ -111,11 +183,11 @@ async def process_agreement(callback: CallbackQuery, state: FSMContext):
         text = "👤 <b>Geben Sie Ihren vollständigen Namen ein:</b>\n\nBeispiel: Ivan Petrenko"
 
     await callback.message.edit_text(text, parse_mode="HTML")
-    await state.set_state(OnboardingStates.waiting_for_name)
+    await state.set_state(OnboardingStates.waiting_for_name_input)
     await callback.answer()
 
 # Name input handler
-@router.message(OnboardingStates.waiting_for_name)
+@router.message(OnboardingStates.waiting_for_name_input)
 async def process_name(message: Message, state: FSMContext):
     name = message.text.strip()
 
@@ -130,26 +202,7 @@ async def process_name(message: Message, state: FSMContext):
         return
 
     await state.update_data(real_name=name)
-
-    # Request phone number
-    data = await state.get_data()
-    language = data.get("language_pref", "uk")
-
-    if language == "uk":
-        text = "📱 <b>Надішліть ваш номер телефону:</b>\n\nНатисніть кнопку нижче або введіть номер вручну."
-        button_text = "📱 Надіслати номер телефону"
-    else:
-        text = "📱 <b>Senden Sie Ihre Telefonnummer:</b>\n\nDrücken Sie die Schaltfläche unten oder geben Sie die Nummer manuell ein."
-        button_text = "📱 Telefonnummer senden"
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=button_text, request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-    await state.set_state(OnboardingStates.waiting_for_phone)
+    await proceed_to_phone(message, state)
 
 # Phone input handler (both contact and text)
 @router.message(OnboardingStates.waiting_for_phone, F.contact)
@@ -173,6 +226,27 @@ async def process_phone_text(message: Message, state: FSMContext):
         return
 
     await finalize_onboarding(message, state, phone)
+
+async def proceed_to_phone(message: Message, state: FSMContext):
+    # Request phone number
+    data = await state.get_data()
+    language = data.get("language_pref", "uk")
+
+    if language == "uk":
+        text = "📱 <b>Надішліть ваш номер телефону:</b>\n\nНатисніть кнопку нижче або введіть номер вручну."
+        button_text = "📱 Надіслати номер телефону"
+    else:
+        text = "📱 <b>Senden Sie Ihre Telefonnummer:</b>\n\nDrücken Sie die Schaltfläche unten oder geben Sie die Nummer manuell ein."
+        button_text = "📱 Telefonnummer senden"
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=button_text, request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    await state.set_state(OnboardingStates.waiting_for_phone)
 
 async def finalize_onboarding(message: Message, state: FSMContext, phone: str):
     data = await state.get_data()
@@ -201,18 +275,33 @@ async def finalize_onboarding(message: Message, state: FSMContext, phone: str):
 
         # Show success message and main menu
         language = data.get("language_pref", "uk")
-        if language == "uk":
-            welcome_text = "🎉 <b>Реєстрація завершена!</b>\n\nТепер ви можете переглядати каталог продуктів та робити замовлення."
-        else:
-            welcome_text = "🎉 <b>Registrierung abgeschlossen!</b>\n\nSie können jetzt den Produktkatalog durchsuchen und Bestellungen aufgeben."
+        main_menu = await get_main_menu_keyboard(language)
+        welcome_text = await get_translation("welcome_message", language)
 
-        await message.answer(welcome_text, reply_markup=get_main_menu_keyboard(), parse_mode="HTML")
+        if language == "uk":
+            success_text = (
+                "🎉 <b>Реєстрація завершена!</b>\n\n"
+                "✅ Ваші дані збережено. Тепер ви можете переглядати каталог продуктів та робити замовлення.\n\n"
+                "👤 Ви можете змінити свої дані в розділі <b>Профіль</b>."
+            )
+        else:
+            success_text = (
+                "🎉 <b>Registrierung abgeschlossen!</b>\n\n"
+                "✅ Ihre Daten wurden gespeichert. Sie können jetzt den Produktkatalog durchsuchen und Bestellungen aufgeben.\n\n"
+                "👤 Sie können Ihre Daten im Bereich <b>Profil</b> ändern."
+            )
+
+        await message.answer(success_text, reply_markup=main_menu, parse_mode="HTML")
 
     except Exception as e:
         await message.answer("Сталася помилка при збереженні даних. Спробуйте ще раз.")
 
 # Impressum handler
-@router.message(F.text == "ℹ️ Impressum")
+@router.message(TranslationFilter("impressum_button"))
+async def handle_impressum_message(message: Message):
+    """Handle impressum button clicks in both languages."""
+    await impressum_handler(message)
+
 async def impressum_handler(message: Message):
     try:
         async with async_session() as session:
@@ -241,3 +330,83 @@ async def impressum_handler(message: Message):
 
     except Exception as e:
         await message.answer("Сталася помилка при завантаженні інформації.")
+
+# Profile handler
+@router.message(TranslationFilter("profile_button"))
+async def handle_profile_message(message: Message):
+    """Handle profile button clicks in both languages."""
+    await profile_handler(message)
+
+async def profile_handler(message: Message):
+    """Show user profile with balance, name, phone and language toggle."""
+    try:
+        async with async_session() as session:
+            user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
+
+            if not user:
+                await message.answer("Користувача не знайдено.")
+                return
+
+            # Get localized labels
+            user_language = user.language_pref or "uk"
+
+            name_label = await get_translation("name_label", user_language)
+            phone_label = await get_translation("phone_label", user_language)
+            balance_label = await get_translation("balance_label", user_language)
+            change_lang_btn = await get_translation("change_lang_btn", user_language)
+
+            # Format profile message
+            profile_text = f"👤 <b>{await get_translation('profile_title', user_language)}</b>\n\n"
+            profile_text += f"{name_label}: {user.full_name or 'Не вказано'}\n"
+            profile_text += f"{phone_label}: {user.phone or 'Не вказано'}\n"
+            profile_text += f"{balance_label}: {user.balance:.2f} €\n"
+
+            # Create inline keyboard with language toggle
+            builder = InlineKeyboardBuilder()
+            builder.button(text=change_lang_btn, callback_data="toggle_language")
+
+            await message.answer(
+                profile_text,
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
+
+    except Exception as e:
+        await message.answer("Сталася помилка при завантаженні профілю.")
+
+# Language toggle callback
+@router.callback_query(F.data == "toggle_language")
+async def toggle_language(callback: CallbackQuery):
+    """Toggle user's language preference between UK and DE."""
+    try:
+        async with async_session() as session:
+            user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+
+            if not user:
+                await callback.answer("Користувача не знайдено.")
+                return
+
+            # Toggle language
+            new_language = "de" if user.language_pref == "uk" else "uk"
+            user.language_pref = new_language
+
+            await session.commit()
+
+            # Get confirmation message in new language
+            if new_language == "de":
+                confirm_msg = "Sprache zu Deutsch gewechselt! 🇩🇪"
+            else:
+                confirm_msg = "Мову змінено на українську! 🇺🇦"
+
+            await callback.answer(confirm_msg, show_alert=True)
+
+            # Refresh the profile view with updated language
+            await profile_handler(callback.message)
+
+            # Send updated main menu in new language
+            main_menu = await get_main_menu_keyboard(new_language)
+            welcome_text = await get_translation("welcome_message", new_language)
+            await callback.message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
+
+    except Exception as e:
+        await callback.answer("Помилка при зміні мови.")
