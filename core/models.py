@@ -22,6 +22,16 @@ class AvailabilityStatus(PyEnum):
     OUT_OF_STOCK = "OUT_OF_STOCK"
     ON_REQUEST = "ON_REQUEST"
 
+class TransactionType(PyEnum):
+    DEPOSIT = "DEPOSIT"
+    PAYMENT = "PAYMENT"
+    REFUND = "REFUND"
+
+class TransactionStatus(PyEnum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
 class User(Base, UserMixin):
     __tablename__ = "users"
 
@@ -37,9 +47,61 @@ class User(Base, UserMixin):
     is_admin = Column(Boolean, default=False)
     language_pref = Column(Enum(LanguagePref), default=LanguagePref.de)
     admin_notes = Column(Text)
+    balance = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     orders = relationship("Order", back_populates="user")
+    transactions = relationship("Transaction", back_populates="user")
+    cart_items = relationship("CartItem", back_populates="user")
+
+    def __str__(self):
+        return self.full_name or self.username or f"User {self.id}"
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    amount = Column(Float)
+    type = Column(Enum(TransactionType))
+    status = Column(Enum(TransactionStatus))
+    external_id = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="transactions")
+
+    def __str__(self):
+        return f"Transaction {self.id}: {self.type.value} {self.amount}"
+
+class CartItem(Base):
+    __tablename__ = "cart_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    product_id = Column(Integer, ForeignKey("products.id"))
+    quantity = Column(Float, default=1.0)
+
+    user = relationship("User", back_populates="cart_items")
+    product = relationship("Product", back_populates="cart_items")
+
+    def __str__(self):
+        return f"CartItem {self.id}: {self.product.name} x{self.quantity}"
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    product_id = Column(Integer, ForeignKey("products.id"))
+    quantity = Column(Float)
+    final_weight = Column(Float, nullable=True)
+    price_at_time = Column(Float)
+
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product", back_populates="order_items")
+
+    def __str__(self):
+        return f"OrderItem {self.id}: {self.product.name} x{self.quantity}"
 
 class Farm(Base):
     __tablename__ = "farms"
@@ -76,6 +138,8 @@ class Product(Base):
 
     category = relationship("Category", back_populates="products")
     farm = relationship("Farm", back_populates="products")
+    cart_items = relationship("CartItem", back_populates="product")
+    order_items = relationship("OrderItem", back_populates="product")
 
     def __str__(self):
         return f"{self.name} ({self.farm.name if self.farm else 'No Farm'})"
@@ -111,6 +175,7 @@ class Order(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="orders")
+    items = relationship("OrderItem", back_populates="order")
 
 class StaticPage(Base):
     __tablename__ = "static_pages"

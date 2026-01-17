@@ -6,7 +6,7 @@ from datetime import datetime
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flask import Flask, redirect, url_for, flash, request, render_template, send_file
+from flask import Flask, redirect, url_for, flash, request, render_template, send_file, jsonify
 from markupsafe import Markup
 import tempfile
 import os
@@ -23,6 +23,7 @@ from wtforms.validators import DataRequired
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy import select
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -62,7 +63,7 @@ def load_user(user_id):
         return session.execute(select(User).where(User.id == int(user_id))).scalar_one_or_none()
 
 # Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -143,9 +144,35 @@ class FarmView(SecureModelView):
 
 # Кастомна в'юха для користувачів
 class UserView(SecureModelView):
-    column_list = ('id', 'tg_id', 'full_name', 'email', 'username', 'phone', 'is_trusted', 'is_admin', 'language_pref', 'created_at')
+    column_list = ('id', 'tg_id', 'full_name', 'email', 'username', 'phone', 'is_trusted', 'is_admin', 'language_pref', 'balance', 'created_at')
     column_exclude_list = ['password_hash']  # Hide password hash from list view
     form_excluded_columns = ['password_hash']  # Hide from form, handle separately if needed
+    column_labels = {
+        'id': 'ID',
+        'tg_id': 'Telegram ID',
+        'full_name': 'Повне ім\'я',
+        'email': 'Email',
+        'username': 'Ім\'я користувача',
+        'phone': 'Телефон',
+        'is_trusted': 'Довірений',
+        'is_admin': 'Адмін',
+        'language_pref': 'Мова',
+        'balance': 'Баланс',
+        'created_at': 'Дата створення'
+    }
+
+# Кастомна в'юха для транзакцій
+class TransactionView(SecureModelView):
+    column_list = ('id', 'user', 'amount', 'type', 'status', 'external_id', 'created_at')
+    column_labels = {
+        'id': 'ID',
+        'user': 'Користувач',
+        'amount': 'Сума',
+        'type': 'Тип',
+        'status': 'Статус',
+        'external_id': 'Зовнішній ID',
+        'created_at': 'Дата створення'
+    }
 
 admin_theme = Bootstrap4Theme(
     swatch='sandstone', # oder darkly, cerulean, cosmo, cyborg, darkly, flatly, journal, litera, lumen, lux, materia, minty, pulse, sandstone, simplex, sketchy, spacelab, superhero, united, yeti 
@@ -164,6 +191,9 @@ admin.add_view(ProductView(Product, db.session))
 admin.add_view(FarmView(Farm, db.session))
 admin.add_view(SecureModelView(Order, db.session))
 admin.add_view(CategoryView(Category, db.session))
+admin.add_view(TransactionView(Transaction, db.session))
+admin.add_view(SecureModelView(CartItem, db.session))
+admin.add_view(SecureModelView(OrderItem, db.session))
 admin.add_view(SecureModelView(StaticPage, db.session))
 admin.add_view(SecureModelView(GlobalSettings, db.session))
 admin.add_view(SecureModelView(Translation, db.session))
@@ -290,6 +320,38 @@ def import_products():
             flash('Будь ласка, виберіть файл .xlsx')
         return redirect(url_for('product.index_view'))
     return render_template('admin/import_products.html')
+
+@app.route('/webhook/paypal/simulate', methods=['POST'])
+def paypal_simulate():
+    data = request.get_json()
+    if not data or 'user_id' not in data or 'amount' not in data or 'paypal_id' not in data:
+        return jsonify({"error": "Invalid data"}), 400
+
+    user_id = data['user_id']
+    amount = data['amount']
+    paypal_id = data['paypal_id']
+
+    with db.session() as session:
+        user = session.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Create transaction
+        transaction = Transaction(
+            user_id=user_id,
+            amount=amount,
+            type=TransactionType.DEPOSIT,
+            status=TransactionStatus.COMPLETED,
+            external_id=paypal_id
+        )
+        session.add(transaction)
+
+        # Update balance
+        user.balance = (user.balance or 0.0) + amount
+
+        session.commit()
+
+        return jsonify({"success": True, "new_balance": user.balance})
 
 @app.errorhandler(404)
 def page_not_found(e):
