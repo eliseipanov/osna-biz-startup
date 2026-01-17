@@ -125,7 +125,7 @@ async def show_category_products(callback: CallbackQuery):
                     # Check if user has this product in cart
                     user_cart_item = await session.scalar(
                         select(CartItem)
-                        .where(CartItem.user_id == callback.from_user.id)
+                        .where(CartItem.user_id == user.id)
                         .where(CartItem.product_id == product.id)
                     )
 
@@ -152,7 +152,7 @@ async def show_category_products(callback: CallbackQuery):
                     cart_count = await session.scalar(
                         select(sqlalchemy.func.count())
                         .select_from(CartItem)
-                        .where(CartItem.user_id == callback.from_user.id)
+                        .where(CartItem.user_id == user.id)
                     )
 
                     if cart_count > 0:
@@ -201,16 +201,22 @@ async def increase_quantity(callback: CallbackQuery):
     if not is_order_allowed():
         await callback.answer("Замовлення на цю суботу закрито!", show_alert=True)
         return
-    
+
     try:
         product_id = int(callback.data.split("_")[1])
-        user_id = callback.from_user.id
-        
+        tg_user_id = callback.from_user.id
+
         async with async_session() as session:
-            # Get or create cart item
+            # Get user object first
+            user = await session.scalar(select(User).where(User.tg_id == tg_user_id))
+            if not user:
+                await callback.answer("Користувача не знайдено.")
+                return
+
+            # Get or create cart item using internal user ID
             cart_item = await session.scalar(
                 select(CartItem)
-                .where(CartItem.user_id == user_id)
+                .where(CartItem.user_id == user.id)
                 .where(CartItem.product_id == product_id)
             )
             
@@ -218,16 +224,16 @@ async def increase_quantity(callback: CallbackQuery):
                 cart_item.quantity += 1.0
             else:
                 cart_item = CartItem(
-                    user_id=user_id,
+                    user_id=user.id,
                     product_id=product_id,
                     quantity=1.0
                 )
                 session.add(cart_item)
-            
+
             await session.commit()
-            
+
             # Update message to show new quantity
-            await update_product_message(callback.message, product_id, user_id)
+            await update_product_message(callback.message, product_id, user.id)
             await callback.answer(f"Додано до кошика. Кількість: {cart_item.quantity}")
     except Exception as e:
         await callback.answer("Сталася помилка при оновленні кошика.")
@@ -236,13 +242,19 @@ async def increase_quantity(callback: CallbackQuery):
 async def decrease_quantity(callback: CallbackQuery):
     try:
         product_id = int(callback.data.split("_")[1])
-        user_id = callback.from_user.id
-        
+        tg_user_id = callback.from_user.id
+
         async with async_session() as session:
-            # Get cart item
+            # Get user object first
+            user = await session.scalar(select(User).where(User.tg_id == tg_user_id))
+            if not user:
+                await callback.answer("Користувача не знайдено.")
+                return
+
+            # Get cart item using internal user ID
             cart_item = await session.scalar(
                 select(CartItem)
-                .where(CartItem.user_id == user_id)
+                .where(CartItem.user_id == user.id)
                 .where(CartItem.product_id == product_id)
             )
             
@@ -250,16 +262,16 @@ async def decrease_quantity(callback: CallbackQuery):
                 if cart_item.quantity > 1:
                     cart_item.quantity -= 1.0
                     await session.commit()
-                    
+
                     # Update message to show new quantity
-                    await update_product_message(callback.message, product_id, user_id)
+                    await update_product_message(callback.message, product_id, user.id)
                     await callback.answer(f"Зменшено кількість. Кількість: {cart_item.quantity}")
                 else:
                     await session.delete(cart_item)
                     await session.commit()
-                    
+
                     # Update message to show new quantity
-                    await update_product_message(callback.message, product_id, user_id)
+                    await update_product_message(callback.message, product_id, user.id)
                     await callback.answer("Товар видалено з кошика.")
             else:
                 await callback.answer("Товар не знайдено в кошику.")
