@@ -35,7 +35,8 @@ async def start_handler(message: Message, state: FSMContext):
             if user and user.phone:
                 main_menu = await get_main_menu_keyboard(user.language_pref or "uk")
                 welcome_text = await get_translation("welcome_message", user.language_pref or "uk")
-                await message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
+                choose_hint = await get_translation("choose_section_hint", user.language_pref or "uk")
+                await message.answer(f"{welcome_text} {choose_hint}", reply_markup=main_menu)
                 return
 
             # Start onboarding flow for new users or incomplete profiles
@@ -337,11 +338,13 @@ async def handle_profile_message(message: Message):
     """Handle profile button clicks in both languages."""
     await profile_handler(message)
 
-async def profile_handler(message: Message):
+async def profile_handler(message: Message, user_id: int = None):
     """Show user profile with balance, name, phone and language toggle."""
     try:
         async with async_session() as session:
-            user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
+            # Use provided user_id or fallback to message sender
+            target_user_id = user_id or message.from_user.id
+            user = await session.scalar(select(User).where(User.tg_id == target_user_id))
 
             if not user:
                 await message.answer("Користувача не знайдено.")
@@ -400,13 +403,13 @@ async def toggle_language(callback: CallbackQuery):
 
             await callback.answer(confirm_msg, show_alert=True)
 
-            # Refresh the profile view with updated language
-            await profile_handler(callback.message)
+            # Update the existing profile message with new language
+            await profile_handler(callback.message, user_id=callback.from_user.id)
 
-            # Send updated main menu in new language
+            # Send updated main menu in new language (single message, no duplicates)
             main_menu = await get_main_menu_keyboard(new_language)
-            welcome_text = await get_translation("welcome_message", new_language)
-            await callback.message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
+            choose_hint = await get_translation("choose_section_hint", new_language)
+            await callback.message.answer(choose_hint, reply_markup=main_menu)
 
     except Exception as e:
         await callback.answer("Помилка при зміні мови.")
