@@ -387,7 +387,7 @@ async def toggle_language(callback: CallbackQuery):
                 return
 
             # Toggle language
-            new_language = "de" if user.language_pref == "uk" else "uk"
+            new_language = "de" if user.language_pref.value == "uk" else "uk"
             user.language_pref = new_language
 
             await session.commit()
