@@ -16,17 +16,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import the views and forms
 from admin_views import LoginForm
-from core.models import User, Transaction, TransactionType, TransactionStatus
+from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus
+
+# Import shared db instance
+from extensions import db
 
 # Create the blueprint
 admin_api = Blueprint('admin_api', __name__)
-
-# This will be set from the main app
-db = None
-
-def init_db(sql_db):
-    global db
-    db = sql_db
 
 @admin_api.route('/login', methods=['GET', 'POST'])
 def login():
@@ -184,6 +180,79 @@ def paypal_simulate():
         session.commit()
 
         return jsonify({"success": True, "new_balance": user.balance})
+
+# WebApp API Endpoints
+@admin_api.route('/api/catalog/farms')
+def api_farms():
+    """Return list of active farms for the WebApp."""
+    with db.session() as session:
+        farms = session.execute(select(Farm).where(Farm.is_active == True)).scalars().all()
+        farms_data = []
+        for farm in farms:
+            farms_data.append({
+                'id': farm.id,
+                'name': farm.name,
+                'description_uk': farm.description_uk,
+                'description_de': farm.description_de,
+                'location': farm.location,
+                'contact_info': farm.contact_info,
+                'image_path': farm.image_path
+            })
+        return jsonify(farms_data)
+
+@admin_api.route('/api/catalog/categories')
+def api_categories():
+    """Return list of categories for the WebApp."""
+    with db.session() as session:
+        categories = session.execute(select(Category)).scalars().all()
+        categories_data = []
+        for category in categories:
+            categories_data.append({
+                'id': category.id,
+                'name': category.name,
+                'name_de': category.name_de,
+                'slug': category.slug,
+                'description': category.description,
+                'description_de': category.description_de,
+                'image_path': category.image_path
+            })
+        return jsonify(categories_data)
+
+@admin_api.route('/api/catalog/products')
+def api_products():
+    """Return products for the WebApp, optionally filtered by category_id."""
+    category_id = request.args.get('category_id', type=int)
+
+    with db.session() as session:
+        query = select(Product).where(Product.availability_status == AvailabilityStatus.IN_STOCK)
+
+        if category_id:
+            # Join with categories for filtering
+            query = query.join(Product.categories).where(Category.id == category_id)
+
+        products = session.execute(query).scalars().all()
+        products_data = []
+        for product in products:
+            # Get category names
+            category_names = [cat.name for cat in product.categories]
+            category_names_de = [cat.name_de for cat in product.categories] if product.categories else []
+
+            products_data.append({
+                'id': product.id,
+                'name': product.name,
+                'name_de': product.name_de,
+                'price': product.price,
+                'unit': product.unit,
+                'sku': product.sku,
+                'description': product.description,
+                'description_de': product.description_de,
+                'categories': category_names,
+                'categories_de': category_names_de,
+                'farm_name': product.farm.name if product.farm else None,
+                'farm_name_de': product.farm.name if product.farm else None,  # Assuming farm names are the same
+                'image_path': product.image_path
+            })
+        return jsonify(products_data)
 #    </content>
 # </xai:function_call name="update_todo_list">
 # <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]

@@ -176,7 +176,7 @@ async def export_products_to_excel(file_path: str):
                 'availability_status': p.availability_status.value if p.availability_status else None,
                 'description': safe_encode_for_sql_ascii(p.description),
                 'description_de': safe_encode_for_sql_ascii(p.description_de),
-                'category_name': safe_encode_for_sql_ascii(p.category.name) if p.category else None,
+                'category_names': safe_encode_for_sql_ascii(", ".join([c.name for c in p.categories])) if p.categories else None,
                 'farm_name': safe_encode_for_sql_ascii(p.farm.name) if p.farm else None,
                 'image_path': p.image_path
             })

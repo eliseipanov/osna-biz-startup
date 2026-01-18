@@ -109,10 +109,11 @@ async def show_category_products(callback: CallbackQuery):
                 await callback.answer(error_msg)
                 return
 
-            # Get products in this category that are in stock
+            # Get products in this category that are in stock (Many-to-Many join)
             products = await session.scalars(
                 select(Product)
-                .where(Product.category_id == category_id)
+                .join(Product.categories)
+                .where(Category.id == category_id)
                 .where(Product.availability_status == AvailabilityStatus.IN_STOCK)
             )
             products = products.all()

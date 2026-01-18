@@ -1,4 +1,9 @@
 {
-    "colab.serverMounting": true,
-    "colab.uploading": true
+    "python.defaultInterpreterPath": ".venv/bin/python",
+    "python.analysis.extraPaths": [
+        "./",
+        "./admin",
+        "./bot"
+    ],
+    "python.analysis.autoImportCompletions": true
 }

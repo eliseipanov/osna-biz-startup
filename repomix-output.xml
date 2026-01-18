@@ -32,8 +32,8 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: bot/**, core/models.py
-- Files matching these patterns are excluded: static/**, .venv/**, **/__pycache__/**
+- Only files matching these patterns are included: admin/**
+- Files matching these patterns are excluded: .venv/**, **/__pycache__/**
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -42,1207 +42,620 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-bot/
-  handlers/
-    start.py
-    store.py
-  keyboards/
-    main_menu.py
-  main.py
-core/
-  models.py
+admin/
+  admin_views.py
+  app.py
+  routes.py
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="bot/handlers/store.py">
-import sqlalchemy
-from aiogram import Router, F, types
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, FSInputFile
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from core.database import async_session
-from core.models import Category, Product, CartItem, User, Translation, AvailabilityStatus
+<file path="admin/admin_views.py">
+import os
+import sys
+
+# Додаємо корінь проекту до шляхів
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from flask_admin import Admin
+from flask_admin.theme import Bootstrap4Theme
+from flask_admin.contrib.sqla import ModelView
+from flask_admin.form.upload import FileUploadField
+from flask_admin.menu import MenuLink
+from flask_login import current_user
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import DataRequired
+from markupsafe import Markup
+
+# Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
+
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Login')
+
+class SecureModelView(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and current_user.is_admin
+
+# Кастомна в'юха для продуктів
+class ProductView(SecureModelView):
+    column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'categories', 'farm', 'image_path')
+    column_display_pk = True
+    # can_export = True  # Disabled to use custom XLSX export
+    column_filters = ['categories', 'farm', 'availability_status']
+    column_searchable_list = ['name', 'sku']
+    column_sortable_list = ['id', 'name', 'name_de', 'sku', 'price', 'unit', 'availability_status', ('categories', 'categories.name'), ('farm', 'farm.name')]
+    column_editable_list = ['price', 'availability_status', 'unit']
+    list_template = 'admin/model/product_list.html'
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва (Укр)',
+        'name_de': 'Назва (Нім)',
+        'price': 'Ціна',
+        'unit': 'Одиниця виміру',
+        'sku': 'Артикул (SKU)',
+        'availability_status': 'Статус наявності',
+        'categories': 'Категорії',
+        'farm': 'Ферма/Виробник',
+        'image_path': 'Зображення'
+    }
+    column_formatters = {
+        'price': lambda v, c, m, p: f"{m.price:.2f} €".replace('.', ',') if m.price else '0,00 €',
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads')
+    }
+
+# Кастомна в'юха для категорій
+class CategoryView(SecureModelView):
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва (Укр)',
+        'name_de': 'Назва (Нім)',
+        'slug': 'Слаг',
+        'image_url': 'URL зображення',
+        'description': 'Опис (Укр)',
+        'description_de': 'Опис (Нім)',
+        'image_path': 'Шлях до зображення'
+    }
+    column_formatters = {
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads', allowed_extensions=['jpg', 'jpeg', 'png', 'gif'])
+    }
+
+# Кастомна в'юха для ферм
+class FarmView(SecureModelView):
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва',
+        'description_uk': 'Опис (Укр)',
+        'description_de': 'Опис (Нім)',
+        'location': 'Місцезнаходження',
+        'contact_info': 'Контактна інформація',
+        'is_active': 'Активний',
+        'image_path': 'Шлях до зображення'
+    }
+    column_formatters = {
+        'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'
+    }
+    form_extra_fields = {
+        'image_path': FileUploadField('Зображення', base_path='static/uploads', allowed_extensions=['jpg', 'jpeg', 'png', 'gif'])
+    }
+
+# Кастомна в'юха для користувачів
+class UserView(SecureModelView):
+    column_list = ('id', 'tg_id', 'full_name', 'email', 'username', 'phone', 'is_trusted', 'is_admin', 'language_pref', 'balance', 'created_at')
+    column_exclude_list = ['password_hash']  # Hide password hash from list view
+    form_excluded_columns = ['password_hash']  # Hide from form, handle separately if needed
+    column_labels = {
+        'id': 'ID',
+        'tg_id': 'Telegram ID',
+        'full_name': 'Повне ім\'я',
+        'email': 'Email',
+        'username': 'Ім\'я користувача',
+        'phone': 'Телефон',
+        'is_trusted': 'Довірений',
+        'is_admin': 'Адмін',
+        'language_pref': 'Мова',
+        'balance': 'Баланс',
+        'created_at': 'Дата створення'
+    }
+
+# Кастомна в'юха для транзакцій
+class TransactionView(SecureModelView):
+    column_list = ('id', 'user', 'amount', 'type', 'status', 'external_id', 'created_at')
+    column_labels = {
+        'id': 'ID',
+        'user': 'Користувач',
+        'amount': 'Сума',
+        'type': 'Тип',
+        'status': 'Статус',
+        'external_id': 'Зовнішній ID',
+        'created_at': 'Дата створення'
+    }
+#    </content>
+# </xai:function_call name="update_todo_list">
+# <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]
+</file>
+
+<file path="admin/routes.py">
+import os
+import sys
+import traceback
 from datetime import datetime
+
+# Додаємо корінь проекту до шляхів
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from flask import Blueprint, redirect, url_for, flash, request, render_template, send_file, jsonify
+import tempfile
 import os
-
-router = Router()
-
-# Helper function to check if message matches translation
-async def matches_translation(message_text: str, translation_key: str) -> bool:
-    """Check if message matches any translation for the given key in both languages."""
-    try:
-        async with async_session() as session:
-            translation = await session.scalar(
-                select(Translation).where(Translation.key == translation_key)
-            )
-            if translation:
-                return (message_text == translation.value_uk or
-                        message_text == translation.value_de)
-    except Exception as e:
-        print(f"Error checking translation for {translation_key}: {e}")
-    return False
-
-# Helper function to get translation for current user language
-async def get_translation(translation_key: str, user_language: str = "uk") -> str:
-    """Get translation for the given key in user's language."""
-    try:
-        async with async_session() as session:
-            translation = await session.scalar(
-                select(Translation).where(Translation.key == translation_key)
-            )
-            if translation:
-                if user_language == "de" and translation.value_de:
-                    return translation.value_de
-                return translation.value_uk or translation_key
-    except Exception as e:
-        print(f"Error getting translation for {translation_key}: {e}")
-    return translation_key
-
-# Helper function to get localized product name
-def get_localized_product_name(product: Product, language: str = "uk") -> str:
-    """Get product name in user's language, fallback to Ukrainian if German not available."""
-    if language == "de" and product.name_de:
-        return product.name_de
-    return product.name or "Unnamed Product"
-
-# Helper function to get localized product description
-def get_localized_product_description(product: Product, language: str = "uk") -> str:
-    """Get product description in user's language, fallback to Ukrainian if German not available."""
-    if language == "de" and product.description_de:
-        return product.description_de
-    return product.description or ""
-
-# Helper function to check if orders are allowed
-
-def is_order_allowed():
-    now = datetime.now()
-    # Friday 12:00 in Europe/Berlin timezone (UTC+1)
-    deadline = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
-    # Check if today is Friday (4) and current time is past deadline
-    if now.weekday() == 4 and now > deadline:
-        return False
-    return True
-
-# Category selection handler
-
-def get_categories_keyboard():
-    builder = InlineKeyboardBuilder()
-    # Add categories dynamically from database
-    # This will be populated in the actual handler
-    return builder.as_markup()
-
-@router.message()
-async def handle_catalog_message(message: Message):
-    """Handle catalog button clicks in both languages."""
-    if await matches_translation(message.text, "catalog_button"):
-        await show_categories(message)
-    try:
-        async with async_session() as session:
-            # Get all categories
-            categories = await session.scalars(select(Category))
-            categories = categories.all()
-            
-            if not categories:
-                await message.answer("Категорії не знайдено.")
-                return
-            
-            # Create inline keyboard with categories
-            builder = InlineKeyboardBuilder()
-            for category in categories:
-                builder.button(
-                    text=category.name,
-                    callback_data=f"category_{category.id}"
-                )
-            
-            builder.adjust(2)  # 2 columns
-            
-            await message.answer(
-                "🥩 <b>Оберіть категорію:</b>",
-                reply_markup=builder.as_markup(),
-                parse_mode="HTML"
-            )
-    except Exception as e:
-        await message.answer("Сталася помилка при завантаженні категорій.")
-
-# Category callback handler
-@router.callback_query(F.data.startswith("category_"))
-async def show_category_products(callback: CallbackQuery):
-    try:
-        category_id = int(callback.data.split("_")[1])
-
-        async with async_session() as session:
-            # Get user language preference
-            user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
-            user_language = user.language_pref if user else "uk"
-
-            # Get category and its products
-            category = await session.get(Category, category_id)
-            if not category:
-                error_msg = "Категорію не знайдено." if user_language == "uk" else "Kategorie nicht gefunden."
-                await callback.answer(error_msg)
-                return
-
-            # Get products in this category that are in stock
-            products = await session.scalars(
-                select(Product)
-                .where(Product.category_id == category_id)
-                .where(Product.availability_status == AvailabilityStatus.IN_STOCK)
-            )
-            products = products.all()
-
-            if not products:
-                error_msg = "У цій категорії немає товарів." if user_language == "uk" else "Keine Produkte in dieser Kategorie."
-                await callback.answer(error_msg)
-                return
-
-            # Send products as cards
-            for product in products:
-                try:
-                    # Build product card caption with localized content
-                    product_name = get_localized_product_name(product, user_language)
-                    product_description = get_localized_product_description(product, user_language)
-
-                    caption = f"<b>{product_name}</b>\n\n"
-                    if product_description:
-                        caption += f"{product_description}\n\n"
-                    caption += f"💶 Ціна: {product.price} €/{product.unit}"
-
-                    # Create inline keyboard for quantity control
-                    builder = InlineKeyboardBuilder()
-
-                    # Check if user has this product in cart
-                    user_cart_item = await session.scalar(
-                        select(CartItem)
-                        .where(CartItem.user_id == callback.from_user.id)
-                        .where(CartItem.product_id == product.id)
-                    )
-
-                    current_quantity = user_cart_item.quantity if user_cart_item else 0
-
-                    # Add quantity control buttons
-                    if is_order_allowed():
-                        builder.button(text="-", callback_data=f"decrease_{product.id}")
-                        builder.button(text=f"В кошику: {current_quantity}", callback_data="qty")
-                        builder.button(text="+", callback_data=f"increase_{product.id}")
-                    else:
-                        builder.button(text="-", callback_data="disabled")
-                        builder.button(text=f"В кошику: {current_quantity}", callback_data="qty")
-                        builder.button(text="+", callback_data="disabled")
-
-                    builder.adjust(3)
-
-                    # Add navigation buttons
-                    builder.row()
-                    back_text = "⬅️ Назад до категорій" if user_language == "uk" else "⬅️ Zurück zu Kategorien"
-                    builder.button(text=back_text, callback_data="back_to_categories")
-
-                    # Check if user has items in cart
-                    cart_count = await session.scalar(
-                        select(sqlalchemy.func.count())
-                        .select_from(CartItem)
-                        .where(CartItem.user_id == callback.from_user.id)
-                    )
-
-                    if cart_count > 0:
-                        cart_text = "🛒 Перейти до кошика" if user_language == "uk" else "🛒 Zum Warenkorb"
-                        builder.button(text=cart_text, callback_data="go_to_cart")
-
-                    # Send product card with better error handling
-                    try:
-                        if product.image_path and os.path.exists(f"static/uploads/{product.image_path}"):
-                            photo = FSInputFile(f"static/uploads/{product.image_path}")
-                            await callback.message.answer_photo(
-                                photo=photo,
-                                caption=caption,
-                                reply_markup=builder.as_markup(),
-                                parse_mode="HTML"
-                            )
-                        else:
-                            # Send text-only message if no image
-                            await callback.message.answer(
-                                caption,
-                                reply_markup=builder.as_markup(),
-                                parse_mode="HTML"
-                            )
-                    except Exception as image_error:
-                        # If image sending fails, send text-only as fallback
-                        print(f"Image error for product {product.id}: {image_error}")
-                        await callback.message.answer(
-                            caption,
-                            reply_markup=builder.as_markup(),
-                            parse_mode="HTML"
-                        )
-
-                except Exception as product_error:
-                    print(f"Error displaying product {product.id}: {product_error}")
-                    # Continue with next product instead of failing completely
-                    continue
-
-            await callback.answer()
-    except Exception as e:
-        print(f"Error in show_category_products: {e}")
-        await callback.answer("Сталася помилка при завантаженні товарів.")
-
-# Quantity control handlers
-@router.callback_query(F.data.startswith("increase_"))
-async def increase_quantity(callback: CallbackQuery):
-    if not is_order_allowed():
-        await callback.answer("Замовлення на цю суботу закрито!", show_alert=True)
-        return
-    
-    try:
-        product_id = int(callback.data.split("_")[1])
-        user_id = callback.from_user.id
-        
-        async with async_session() as session:
-            # Get or create cart item
-            cart_item = await session.scalar(
-                select(CartItem)
-                .where(CartItem.user_id == user_id)
-                .where(CartItem.product_id == product_id)
-            )
-            
-            if cart_item:
-                cart_item.quantity += 1.0
-            else:
-                cart_item = CartItem(
-                    user_id=user_id,
-                    product_id=product_id,
-                    quantity=1.0
-                )
-                session.add(cart_item)
-            
-            await session.commit()
-            
-            # Update message to show new quantity
-            await update_product_message(callback.message, product_id, user_id)
-            await callback.answer(f"Додано до кошика. Кількість: {cart_item.quantity}")
-    except Exception as e:
-        await callback.answer("Сталася помилка при оновленні кошика.")
-
-@router.callback_query(F.data.startswith("decrease_"))
-async def decrease_quantity(callback: CallbackQuery):
-    try:
-        product_id = int(callback.data.split("_")[1])
-        user_id = callback.from_user.id
-        
-        async with async_session() as session:
-            # Get cart item
-            cart_item = await session.scalar(
-                select(CartItem)
-                .where(CartItem.user_id == user_id)
-                .where(CartItem.product_id == product_id)
-            )
-            
-            if cart_item:
-                if cart_item.quantity > 1:
-                    cart_item.quantity -= 1.0
-                    await session.commit()
-                    
-                    # Update message to show new quantity
-                    await update_product_message(callback.message, product_id, user_id)
-                    await callback.answer(f"Зменшено кількість. Кількість: {cart_item.quantity}")
-                else:
-                    await session.delete(cart_item)
-                    await session.commit()
-                    
-                    # Update message to show new quantity
-                    await update_product_message(callback.message, product_id, user_id)
-                    await callback.answer("Товар видалено з кошика.")
-            else:
-                await callback.answer("Товар не знайдено в кошику.")
-    except Exception as e:
-        await callback.answer("Сталася помилка при оновленні кошика.")
-
-# Navigation handlers
-@router.callback_query(F.data == "back_to_categories")
-async def back_to_categories(callback: CallbackQuery):
-    try:
-        async with async_session() as session:
-            # Get all categories
-            categories = await session.scalars(select(Category))
-            categories = categories.all()
-            
-            if not categories:
-                await callback.answer("Категорії не знайдено.")
-                return
-            
-            # Create inline keyboard with categories
-            builder = InlineKeyboardBuilder()
-            for category in categories:
-                builder.button(
-                    text=category.name,
-                    callback_data=f"category_{category.id}"
-                )
-            
-            builder.adjust(2)  # 2 columns
-            
-            await callback.message.edit_text(
-                "🥩 <b>Оберіть категорію:</b>",
-                reply_markup=builder.as_markup(),
-                parse_mode="HTML"
-            )
-            await callback.answer()
-    except Exception as e:
-        await callback.answer("Сталася помилка при поверненні до категорій.")
-
-@router.callback_query(F.data == "go_to_cart")
-async def go_to_cart(callback: CallbackQuery):
-    await callback.answer("Функціонал кошика ще не реалізовано.")
-
-# Helper function to update product message with new quantity
-async def update_product_message(message: Message, product_id: int, user_id: int):
-    try:
-        async with async_session() as session:
-            # Get user language preference
-            user = await session.scalar(select(User).where(User.tg_id == user_id))
-            user_language = user.language_pref if user else "uk"
-
-            # Get product and cart item
-            product = await session.get(Product, product_id)
-            cart_item = await session.scalar(
-                select(CartItem)
-                .where(CartItem.user_id == user_id)
-                .where(CartItem.product_id == product_id)
-            )
-
-            if not product:
-                return
-
-            current_quantity = cart_item.quantity if cart_item else 0
-
-            # Build updated caption with localized content
-            product_name = get_localized_product_name(product, user_language)
-            product_description = get_localized_product_description(product, user_language)
-
-            caption = f"<b>{product_name}</b>\n\n"
-            if product_description:
-                caption += f"{product_description}\n\n"
-            caption += f"💶 Ціна: {product.price} €/{product.unit}"
-
-            # Create updated inline keyboard
-            builder = InlineKeyboardBuilder()
-
-            if is_order_allowed():
-                builder.button(text="-", callback_data=f"decrease_{product.id}")
-                cart_text = f"В кошику: {current_quantity}" if user_language == "uk" else f"Im Warenkorb: {current_quantity}"
-                builder.button(text=cart_text, callback_data="qty")
-                builder.button(text="+", callback_data=f"increase_{product.id}")
-            else:
-                builder.button(text="-", callback_data="disabled")
-                cart_text = f"В кошику: {current_quantity}" if user_language == "uk" else f"Im Warenkorb: {current_quantity}"
-                builder.button(text=cart_text, callback_data="qty")
-                builder.button(text="+", callback_data="disabled")
-
-            builder.adjust(3)
-
-            # Add navigation buttons
-            builder.row()
-            back_text = "⬅️ Назад до категорій" if user_language == "uk" else "⬅️ Zurück zu Kategorien"
-            builder.button(text=back_text, callback_data="back_to_categories")
-
-            # Check if user has items in cart
-            cart_count = await session.scalar(
-                select(sqlalchemy.func.count())
-                .select_from(CartItem)
-                .where(CartItem.user_id == user_id)
-            )
-
-            if cart_count > 0:
-                cart_btn_text = "🛒 Перейти до кошика" if user_language == "uk" else "🛒 Zum Warenkorb"
-                builder.button(text=cart_btn_text, callback_data="go_to_cart")
-
-            # Edit the original message with better error handling
-            try:
-                if product.image_path and os.path.exists(f"static/uploads/{product.image_path}"):
-                    await message.edit_caption(
-                        caption=caption,
-                        reply_markup=builder.as_markup(),
-                        parse_mode="HTML"
-                    )
-                else:
-                    await message.edit_text(
-                        text=caption,
-                        reply_markup=builder.as_markup(),
-                        parse_mode="HTML"
-                    )
-            except Exception as edit_error:
-                print(f"Error editing message for product {product_id}: {edit_error}")
-    except Exception as e:
-        print(f"Error updating product message: {e}")
-</file>
-
-<file path="bot/keyboards/main_menu.py">
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import login_user, login_required, logout_user, current_user
 from sqlalchemy import select
-from core.database import async_session
-from core.models import Translation
+from werkzeug.security import generate_password_hash, check_password_hash
 
-async def get_main_menu_keyboard(user_language="uk"):
-    """Get main menu keyboard with localized button labels from database."""
-    try:
-        async with async_session() as session:
-            # Fetch translations for main menu buttons
-            catalog_trans = await session.scalar(
-                select(Translation).where(Translation.key == "catalog_button")
-            )
-            profile_trans = await session.scalar(
-                select(Translation).where(Translation.key == "profile_button")
-            )
-            impressum_trans = await session.scalar(
-                select(Translation).where(Translation.key == "impressum_button")
-            )
+# Import the views and forms
+from admin_views import LoginForm
+from core.models import User, Transaction, TransactionType, TransactionStatus
 
-            # Get localized text based on user language
-            catalog_text = (catalog_trans.value_de if user_language == "de" and catalog_trans.value_de
-                          else catalog_trans.value_uk if catalog_trans else "🥩 Catalog")
+# Create the blueprint
+admin_api = Blueprint('admin_api', __name__)
 
-            profile_text = (profile_trans.value_de if user_language == "de" and profile_trans.value_de
-                          else profile_trans.value_uk if profile_trans else "👤 Profile")
+# This will be set from the main app
+db = None
 
-            impressum_text = (impressum_trans.value_de if user_language == "de" and impressum_trans.value_de
-                            else impressum_trans.value_uk if impressum_trans else "ℹ️ Impressum")
+def init_db(sql_db):
+    global db
+    db = sql_db
 
-            # Add WebApp placeholder to catalog button
-            catalog_text += " (WebApp Placeholder)"
+@admin_api.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('admin.index'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        print(f"Login attempt for: {form.username.data}")
+        from sqlalchemy import select
+        with db.session() as session:
+            # First try Telegram ID (backward compatibility)
+            try:
+                tg_id = int(form.username.data)
+                user = session.execute(select(User).where(User.tg_id == tg_id)).scalar_one_or_none()
+                print(f"Found user by TG ID: {user.full_name if user else 'None'}")
+            except ValueError:
+                # Not a number, try email or username
+                user = session.execute(select(User).where(
+                    (User.email == form.username.data) | (User.username == form.username.data)
+                )).scalar_one_or_none()
+                print(f"Found user by email/username: {user.full_name if user else 'None'}")
 
-            keyboard = [
-                [KeyboardButton(text=catalog_text)],
-                [KeyboardButton(text=profile_text)],
-                [KeyboardButton(text=impressum_text)]
-            ]
-            return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, persistent=True)
-    except Exception as e:
-        # Fallback to hardcoded English if database error
-        keyboard = [
-            [KeyboardButton(text="🥩 Catalog (WebApp Placeholder)")],
-            [KeyboardButton(text="👤 Profile")],
-            [KeyboardButton(text="ℹ️ Impressum")]
-        ]
-        return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, persistent=True)
+            if user:
+                print(f"User is_admin: {user.is_admin}")
+                if user.password_hash:
+                    # Has password, check it
+                    if check_password_hash(user.password_hash, form.password.data):
+                        print("Password match")
+                        if user.is_admin:
+                            login_user(user)
+                            print("Login successful, redirecting")
+                            return redirect(url_for('admin.index'))
+                        else:
+                            print("User is not admin")
+                            flash('Access denied')
+                    else:
+                        print("Password mismatch")
+                        flash('Invalid password')
+                else:
+                    # No password set, allow login via TG ID only
+                    if str(user.tg_id) == form.username.data:
+                        print("No password required, login via TG ID")
+                        if user.is_admin:
+                            login_user(user)
+                            print("Login successful, redirecting")
+                            return redirect(url_for('admin.index'))
+                        else:
+                            print("User is not admin")
+                            flash('Access denied')
+                    else:
+                        print("No password set, but not logging in via TG ID")
+                        flash('Invalid credentials')
+            else:
+                print("User not found")
+                flash('User not found')
+    return render_template('admin/login.html', form=form)
 
-# Backward compatibility function
-def get_main_menu_keyboard():
-    """Synchronous fallback for backward compatibility."""
-    import asyncio
-    try:
-        # Try to get event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we can't call async function directly
-            # Return fallback keyboard
-            keyboard = [
-                [KeyboardButton(text="🥩 Catalog (WebApp Placeholder)")],
-                [KeyboardButton(text="👤 Profile")],
-                [KeyboardButton(text="ℹ️ Impressum")]
-            ]
-            return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, persistent=True)
+@admin_api.route('/admin/logout')
+@login_required
+def admin_logout():
+    logout_user()
+    return redirect(url_for('admin_api.login'))
+
+@admin_api.route('/admin/export_products')
+@login_required
+def export_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    import tempfile
+    import os
+    from core.utils.excel_manager import export_products_to_excel_sync
+
+    # Get the filtered products from ProductView
+    product_view = None
+    from flask import current_app
+    admin = current_app.extensions.get('admin')
+    if admin:
+        for view in admin._views:
+            if hasattr(view, 'endpoint') and view.endpoint == 'product':
+                product_view = view
+                break
+    if product_view:
+        # Get arguments
+        v_args = product_view._get_list_extra_args()
+        # Fetch data
+        count, products = product_view.get_list(page=0, sort_column=v_args.sort, sort_desc=v_args.sort_desc, search=v_args.search, filters=v_args.filters, page_size=10000)
+    else:
+        products = None
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        try:
+            export_products_to_excel_sync(db.session, tmp.name, products=products)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            filename = f"products_{timestamp}.xlsx"
+            return send_file(tmp.name, as_attachment=True, download_name=filename)
+        except Exception as e:
+            print(f"Export error: {str(e)}")
+            traceback.print_exc()
+            flash(f'Помилка експорту: {str(e)}')
+            return redirect(url_for('product.index_view'))
+
+@admin_api.route('/admin/import_products', methods=['GET', 'POST'])
+@login_required
+def import_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and file.filename.endswith('.xlsx'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                file.save(tmp.name)
+                try:
+                    from core.utils.excel_manager import import_products_from_excel_sync
+                    result = import_products_from_excel_sync(db.session, tmp.name)
+                    flash(f'Імпорт завершено: {result}')
+                except Exception as e:
+                    flash(f'Помилка імпорту: {str(e)}')
+                finally:
+                    os.unlink(tmp.name)
         else:
-            # Create new event loop
-            return loop.run_until_complete(get_main_menu_keyboard_async())
-    except RuntimeError:
-        # No event loop, return fallback
-        keyboard = [
-            [KeyboardButton(text="🥩 Catalog (WebApp Placeholder)")],
-            [KeyboardButton(text="👤 Profile")],
-            [KeyboardButton(text="ℹ️ Impressum")]
-        ]
-        return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, persistent=True)
+            flash('Будь ласка, виберіть файл .xlsx')
+        return redirect(url_for('product.index_view'))
+    return render_template('admin/import_products.html')
+
+@admin_api.route('/webhook/paypal/simulate', methods=['POST'])
+def paypal_simulate():
+    data = request.get_json()
+    if not data or 'user_id' not in data or 'amount' not in data or 'paypal_id' not in data:
+        return jsonify({"error": "Invalid data"}), 400
+
+    user_id = data['user_id']
+    amount = data['amount']
+    paypal_id = data['paypal_id']
+
+    with db.session() as session:
+        user = session.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Create transaction
+        transaction = Transaction(
+            user_id=user_id,
+            amount=amount,
+            type=TransactionType.DEPOSIT,
+            status=TransactionStatus.COMPLETED,
+            external_id=paypal_id
+        )
+        session.add(transaction)
+
+        # Update balance
+        user.balance = (user.balance or 0.0) + amount
+
+        session.commit()
+
+        return jsonify({"success": True, "new_balance": user.balance})
+#    </content>
+# </xai:function_call name="update_todo_list">
+# <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]
 </file>
 
-<file path="bot/main.py">
-import asyncio
+<file path="admin/app.py">
 import os
-from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher
+import sys
 
-from bot.handlers.start import router as start_router
-from bot.handlers.store import router as store_router
+# Додаємо корінь проекту до шляхів
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_admin import Admin
+from flask_admin.theme import Bootstrap4Theme
+from flask_admin.menu import MenuLink
+from flask_login import LoginManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+app.config['SECRET_KEY'] = os.getenv("SECRET_KEY")
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB limit
 
-dp.include_router(start_router)
-dp.include_router(store_router)
+# Налаштування бази
+DATABASE_URL = os.getenv("DATABASE_URL").replace("postgresql+asyncpg", "postgresql")
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-async def main():
-    await dp.start_polling(bot)
+# Це примусово лікує UnicodeDecodeError на рівні підключення
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "connect_args": {
+        "options": "-c client_encoding=utf8"
+    }
+}
 
-if __name__ == "__main__":
-    asyncio.run(main())
-</file>
+db = SQLAlchemy(app)
 
-<file path="bot/handlers/start.py">
-from aiogram import Router, F
-from aiogram.filters import Command, BaseFilter
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'admin_api.login'
 
-from sqlalchemy import select
+limiter = Limiter(get_remote_address, app=app)
 
-from core.database import async_session
-from core.models import User, StaticPage, Translation
-from bot.keyboards.main_menu import get_main_menu_keyboard
+@login_manager.user_loader
+def load_user(user_id):
+    from sqlalchemy import select
+    from core.models import User
+    with db.session() as session:
+        return session.execute(select(User).where(User.id == int(user_id))).scalar_one_or_none()
 
-# Custom Translation Filter for multilingual button handling
-class TranslationFilter(BaseFilter):
-    def __init__(self, key: str):
-        self.key = key
+# Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
 
-    async def __call__(self, message: Message) -> bool:
-        async with async_session() as session:
-            trans = await session.scalar(select(Translation).where(Translation.key == self.key))
-            if not trans: return False
-            return message.text in [trans.value_uk, trans.value_de]
+# Import views and routes
+from admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView
+from routes import admin_api
 
-router = Router()
+# Initialize the db reference in routes
+admin_api.init_db(db)
 
-# Helper function to check if message matches translation
-async def matches_translation(message_text: str, translation_key: str) -> bool:
-    """Check if message matches any translation for the given key in both languages."""
-    try:
-        async with async_session() as session:
-            translation = await session.scalar(
-                select(Translation).where(Translation.key == translation_key)
-            )
-            if translation:
-                return (message_text == translation.value_uk or
-                        message_text == translation.value_de)
-    except Exception as e:
-        print(f"Error checking translation for {translation_key}: {e}")
-    return False
+# Register the blueprint
+app.register_blueprint(admin_api)
 
-# Helper function to get translation for current user language
-async def get_translation(translation_key: str, user_language: str = "uk") -> str:
-    """Get translation for the given key in user's language."""
-    try:
-        async with async_session() as session:
-            translation = await session.scalar(
-                select(Translation).where(Translation.key == translation_key)
-            )
-            if translation:
-                if user_language == "de" and translation.value_de:
-                    return translation.value_de
-                return translation.value_uk or translation_key
-    except Exception as e:
-        print(f"Error getting translation for {translation_key}: {e}")
-    return translation_key
+admin_theme = Bootstrap4Theme(
+    swatch='sandstone',
+    base_template='admin/master.html'
+)
 
-# FSM States for onboarding
-class OnboardingStates(StatesGroup):
-    waiting_for_language = State()
-    waiting_for_agreement = State()
-    waiting_for_name_confirmation = State()
-    waiting_for_name_input = State()
-    waiting_for_phone = State()
+admin = Admin(app, name='Osna Farm', theme=admin_theme)
 
-@router.message(Command("start"))
-async def start_handler(message: Message, state: FSMContext):
-    tg_id = message.from_user.id
-    full_name = message.from_user.full_name
+# Add logout menu item
+admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
 
-    try:
-        async with async_session() as session:
-            user = await session.scalar(select(User).where(User.tg_id == tg_id))
+# Додаємо в'юхи правильно
+admin.add_view(UserView(User, db.session))
+admin.add_view(ProductView(Product, db.session))
+admin.add_view(FarmView(Farm, db.session))
+admin.add_view(SecureModelView(Order, db.session))
+admin.add_view(CategoryView(Category, db.session))
+admin.add_view(TransactionView(Transaction, db.session))
+admin.add_view(SecureModelView(CartItem, db.session))
+admin.add_view(SecureModelView(OrderItem, db.session))
+admin.add_view(SecureModelView(StaticPage, db.session))
+admin.add_view(SecureModelView(GlobalSettings, db.session))
+admin.add_view(SecureModelView(Translation, db.session))
 
-            # If user exists and has completed onboarding (has phone), show main menu
-            if user and user.phone:
-                main_menu = await get_main_menu_keyboard(user.language_pref or "uk")
-                welcome_text = await get_translation("welcome_message", user.language_pref or "uk")
-                await message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
-                return
+@app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per 15 minutes")
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('admin.index'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        print(f"Login attempt for: {form.username.data}")
+        from sqlalchemy import select
+        with db.session() as session:
+            # First try Telegram ID (backward compatibility)
+            try:
+                tg_id = int(form.username.data)
+                user = session.execute(select(User).where(User.tg_id == tg_id)).scalar_one_or_none()
+                print(f"Found user by TG ID: {user.full_name if user else 'None'}")
+            except ValueError:
+                # Not a number, try email or username
+                user = session.execute(select(User).where(
+                    (User.email == form.username.data) | (User.username == form.username.data)
+                )).scalar_one_or_none()
+                print(f"Found user by email/username: {user.full_name if user else 'None'}")
 
-            # Start onboarding flow for new users or incomplete profiles
-            await state.update_data(tg_id=tg_id, full_name=full_name)
-
-            # Language selection
-            builder = InlineKeyboardBuilder()
-            builder.button(text="🇺🇦 Українська", callback_data="lang_uk")
-            builder.button(text="🇩🇪 Deutsch", callback_data="lang_de")
-
-            await message.answer(
-                "🌍 <b>Виберіть мову / Choose language:</b>\n\n"
-                "🇺🇦 Українська\n"
-                "🇩🇪 Deutsch",
-                reply_markup=builder.as_markup(),
-                parse_mode="HTML"
-            )
-            await state.set_state(OnboardingStates.waiting_for_language)
-
-    except Exception as e:
-        await message.answer("Сталася помилка при реєстрації. Спробуйте ще раз.")
-
-# Language selection callback
-@router.callback_query(OnboardingStates.waiting_for_language, F.data.startswith("lang_"))
-async def process_language(callback: CallbackQuery, state: FSMContext):
-    language = callback.data.split("_")[1]  # "uk" or "de"
-    await state.update_data(language_pref=language)
-
-    # Save language preference immediately to database
-    data = await state.get_data()
-    try:
-        async with async_session() as session:
-            # Get or create user
-            user = await session.scalar(select(User).where(User.tg_id == data["tg_id"]))
-
-            if not user:
-                user = User(
-                    tg_id=data["tg_id"],
-                    full_name=data["full_name"]
-                )
-                session.add(user)
-
-            # Save language preference immediately
-            user.language_pref = language
-            await session.commit()
-    except Exception as e:
-        # Continue with onboarding even if DB save fails
-        pass
-
-    # Show legal agreement
-    if language == "uk":
-        text = (
-            "📋 <b>Правила використання системи</b>\n\n"
-            "Ласкаво просимо до Osnabrück Farm Connect!\n\n"
-            "Ця система допомагає місцевим фермерам з Оснабрюка "
-            "продавати свіжі продукти українській громаді.\n\n"
-            "🔒 <b>Політика конфіденційності:</b>\n"
-            "Ваші дані використовуються тільки для обробки замовлень.\n\n"
-            "📞 <b>Контакти:</b>\n"
-            "Для питань звертайтеся до адміністратора.\n\n"
-            "Натисніть кнопку нижче, щоб погодитися з правилами."
-        )
-        agree_text = "✅ Згоден з правилами"
-    else:
-        text = (
-            "📋 <b>Nutzungsbedingungen</b>\n\n"
-            "Willkommen bei Osnabrück Farm Connect!\n\n"
-            "Dieses System hilft lokalen Bauern aus Osnabrück, "
-            "frische Produkte an die ukrainische Gemeinschaft zu verkaufen.\n\n"
-            "🔒 <b>Datenschutz:</b>\n"
-            "Ihre Daten werden nur zur Auftragsabwicklung verwendet.\n\n"
-            "📞 <b>Kontakte:</b>\n"
-            "Bei Fragen wenden Sie sich an den Administrator.\n\n"
-            "Drücken Sie die Schaltfläche unten, um den Bedingungen zuzustimmen."
-        )
-        agree_text = "✅ Ich stimme den Bedingungen zu"
-
-    builder = InlineKeyboardBuilder()
-    builder.button(text=agree_text, callback_data="agree")
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=builder.as_markup(),
-        parse_mode="HTML"
-    )
-    await state.set_state(OnboardingStates.waiting_for_agreement)
-    await callback.answer()
-
-# Agreement callback
-@router.callback_query(OnboardingStates.waiting_for_agreement, F.data == "agree")
-async def process_agreement(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    language = data.get("language_pref", "uk")
-    telegram_name = data.get("full_name", "User")
-
-    # Show success message and suggest Telegram name
-    if language == "uk":
-        text = (
-            "✅ <b>Дякуємо за згоду!</b>\n\n"
-            f"👤 Ми бачимо вас як: <b>{telegram_name}</b>\n\n"
-            "Використовувати це ім'я для замовлень?"
-        )
-        yes_text = "✅ Так, використовувати це ім'я"
-        change_text = "✏️ Змінити ім'я"
-    else:
-        text = (
-            "✅ <b>Vielen Dank für Ihre Zustimmung!</b>\n\n"
-            f"👤 Wir sehen Sie als: <b>{telegram_name}</b>\n\n"
-            "Dieses Namen für Bestellungen verwenden?"
-        )
-        yes_text = "✅ Ja, diesen Namen verwenden"
-        change_text = "✏️ Namen ändern"
-
-    builder = InlineKeyboardBuilder()
-    builder.button(text=yes_text, callback_data="name_yes")
-    builder.button(text=change_text, callback_data="name_change")
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=builder.as_markup(),
-        parse_mode="HTML"
-    )
-    await state.set_state(OnboardingStates.waiting_for_name_confirmation)
-    await callback.answer()
-
-# Name confirmation handlers
-@router.callback_query(OnboardingStates.waiting_for_name_confirmation, F.data == "name_yes")
-async def process_name_yes(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    telegram_name = data.get("full_name", "User")
-
-    # Use Telegram name
-    await state.update_data(real_name=telegram_name)
-    await proceed_to_phone(callback.message, state)
-    await callback.answer()
-
-@router.callback_query(OnboardingStates.waiting_for_name_confirmation, F.data == "name_change")
-async def process_name_change(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    language = data.get("language_pref", "uk")
-
-    if language == "uk":
-        text = "👤 <b>Введіть ваше справжнє ім'я та прізвище:</b>\n\nНаприклад: Іван Петренко"
-    else:
-        text = "👤 <b>Geben Sie Ihren vollständigen Namen ein:</b>\n\nBeispiel: Ivan Petrenko"
-
-    await callback.message.edit_text(text, parse_mode="HTML")
-    await state.set_state(OnboardingStates.waiting_for_name_input)
-    await callback.answer()
-
-# Name input handler
-@router.message(OnboardingStates.waiting_for_name_input)
-async def process_name(message: Message, state: FSMContext):
-    name = message.text.strip()
-
-    if len(name) < 2:
-        data = await state.get_data()
-        language = data.get("language_pref", "uk")
-
-        if language == "uk":
-            await message.answer("❌ Ім'я повинно містити принаймні 2 символи. Спробуйте ще раз:")
-        else:
-            await message.answer("❌ Der Name muss mindestens 2 Zeichen enthalten. Versuchen Sie es erneut:")
-        return
-
-    await state.update_data(real_name=name)
-    await proceed_to_phone(message, state)
-
-# Phone input handler (both contact and text)
-@router.message(OnboardingStates.waiting_for_phone, F.contact)
-async def process_phone_contact(message: Message, state: FSMContext):
-    phone = message.contact.phone_number
-    await finalize_onboarding(message, state, phone)
-
-@router.message(OnboardingStates.waiting_for_phone)
-async def process_phone_text(message: Message, state: FSMContext):
-    phone = message.text.strip()
-
-    # Basic phone validation
-    if not phone or len(phone) < 7:
-        data = await state.get_data()
-        language = data.get("language_pref", "uk")
-
-        if language == "uk":
-            await message.answer("❌ Будь ласка, введіть коректний номер телефону:")
-        else:
-            await message.answer("❌ Bitte geben Sie eine gültige Telefonnummer ein:")
-        return
-
-    await finalize_onboarding(message, state, phone)
-
-async def proceed_to_phone(message: Message, state: FSMContext):
-    # Request phone number
-    data = await state.get_data()
-    language = data.get("language_pref", "uk")
-
-    if language == "uk":
-        text = "📱 <b>Надішліть ваш номер телефону:</b>\n\nНатисніть кнопку нижче або введіть номер вручну."
-        button_text = "📱 Надіслати номер телефону"
-    else:
-        text = "📱 <b>Senden Sie Ihre Telefonnummer:</b>\n\nDrücken Sie die Schaltfläche unten oder geben Sie die Nummer manuell ein."
-        button_text = "📱 Telefonnummer senden"
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=button_text, request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-    await state.set_state(OnboardingStates.waiting_for_phone)
-
-async def finalize_onboarding(message: Message, state: FSMContext, phone: str):
-    data = await state.get_data()
-
-    try:
-        async with async_session() as session:
-            # Get or create user
-            user = await session.scalar(select(User).where(User.tg_id == data["tg_id"]))
-
-            if not user:
-                user = User(
-                    tg_id=data["tg_id"],
-                    full_name=data["full_name"]
-                )
-                session.add(user)
-
-            # Update user data
-            user.language_pref = data["language_pref"]
-            user.full_name = data["real_name"]  # Override with real name
-            user.phone = phone
-
-            await session.commit()
-
-        # Clear state
-        await state.clear()
-
-        # Show success message and main menu
-        language = data.get("language_pref", "uk")
-        main_menu = await get_main_menu_keyboard(language)
-        welcome_text = await get_translation("welcome_message", language)
-
-        if language == "uk":
-            success_text = (
-                "🎉 <b>Реєстрація завершена!</b>\n\n"
-                "✅ Ваші дані збережено. Тепер ви можете переглядати каталог продуктів та робити замовлення.\n\n"
-                "👤 Ви можете змінити свої дані в розділі <b>Профіль</b>."
-            )
-        else:
-            success_text = (
-                "🎉 <b>Registrierung abgeschlossen!</b>\n\n"
-                "✅ Ihre Daten wurden gespeichert. Sie können jetzt den Produktkatalog durchsuchen und Bestellungen aufgeben.\n\n"
-                "👤 Sie können Ihre Daten im Bereich <b>Profil</b> ändern."
-            )
-
-        await message.answer(success_text, reply_markup=main_menu, parse_mode="HTML")
-
-    except Exception as e:
-        await message.answer("Сталася помилка при збереженні даних. Спробуйте ще раз.")
-
-# Impressum handler
-@router.message(TranslationFilter("impressum_button"))
-async def handle_impressum_message(message: Message):
-    """Handle impressum button clicks in both languages."""
-    await impressum_handler(message)
-
-async def impressum_handler(message: Message):
-    try:
-        async with async_session() as session:
-            # Get impressum from StaticPage table
-            impressum_page = await session.scalar(
-                select(StaticPage).where(StaticPage.slug == "impressum")
-            )
-
-            if impressum_page:
-                # Get user language preference
-                user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
-                language = user.language_pref if user else "uk"
-
-                if language == "uk":
-                    title = impressum_page.title_uk or impressum_page.title
-                    content = impressum_page.content_uk or impressum_page.content
+            if user:
+                print(f"User is_admin: {user.is_admin}")
+                if user.password_hash:
+                    # Has password, check it
+                    if check_password_hash(user.password_hash, form.password.data):
+                        print("Password match")
+                        if user.is_admin:
+                            login_user(user)
+                            print("Login successful, redirecting")
+                            return redirect(url_for('admin.index'))
+                        else:
+                            print("User is not admin")
+                            flash('Access denied')
+                    else:
+                        print("Password mismatch")
+                        flash('Invalid password')
                 else:
-                    title = impressum_page.title_de or impressum_page.title
-                    content = impressum_page.content_de or impressum_page.content
-
-                text = f"<b>{title}</b>\n\n{content}"
+                    # No password set, allow login via TG ID only
+                    if str(user.tg_id) == form.username.data:
+                        print("No password required, login via TG ID")
+                        if user.is_admin:
+                            login_user(user)
+                            print("Login successful, redirecting")
+                            return redirect(url_for('admin.index'))
+                        else:
+                            print("User is not admin")
+                            flash('Access denied')
+                    else:
+                        print("No password set, but not logging in via TG ID")
+                        flash('Invalid credentials')
             else:
-                text = "ℹ️ <b>Impressum</b>\n\nІнформація про компанію буде додана найближчим часом."
+                print("User not found")
+                flash('User not found')
+    return render_template('admin/login.html', form=form)
 
-            await message.answer(text, parse_mode="HTML")
+@app.route('/admin/logout')
+@login_required
+def admin_logout():
+    logout_user()
+    return redirect(url_for('login'))
 
-    except Exception as e:
-        await message.answer("Сталася помилка при завантаженні інформації.")
+@app.route('/admin/export_products')
+@login_required
+def export_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    import tempfile
+    import os
+    from core.utils.excel_manager import export_products_to_excel_sync
 
-# Profile handler
-@router.message(TranslationFilter("profile_button"))
-async def handle_profile_message(message: Message):
-    """Handle profile button clicks in both languages."""
-    await profile_handler(message)
+    # Get the filtered products from ProductView
+    product_view = None
+    for view in admin._views:
+        if hasattr(view, 'endpoint') and view.endpoint == 'product':
+            product_view = view
+            break
+    if product_view:
+        # Get arguments
+        v_args = product_view._get_list_extra_args()
+        # Fetch data
+        count, products = product_view.get_list(page=0, sort_column=v_args.sort, sort_desc=v_args.sort_desc, search=v_args.search, filters=v_args.filters, page_size=10000)
+    else:
+        products = None
 
-async def profile_handler(message: Message):
-    """Show user profile with balance, name, phone and language toggle."""
-    try:
-        async with async_session() as session:
-            user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        try:
+            export_products_to_excel_sync(db.session, tmp.name, products=products)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            filename = f"products_{timestamp}.xlsx"
+            return send_file(tmp.name, as_attachment=True, download_name=filename)
+        except Exception as e:
+            print(f"Export error: {str(e)}")
+            traceback.print_exc()
+            flash(f'Помилка експорту: {str(e)}')
+            return redirect(url_for('product.index_view'))
 
-            if not user:
-                await message.answer("Користувача не знайдено.")
-                return
+@app.route('/admin/import_products', methods=['GET', 'POST'])
+@login_required
+def import_products():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin.index'))
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and file.filename.endswith('.xlsx'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                file.save(tmp.name)
+                try:
+                    from core.utils.excel_manager import import_products_from_excel_sync
+                    result = import_products_from_excel_sync(db.session, tmp.name)
+                    flash(f'Імпорт завершено: {result}')
+                except Exception as e:
+                    flash(f'Помилка імпорту: {str(e)}')
+                finally:
+                    os.unlink(tmp.name)
+        else:
+            flash('Будь ласка, виберіть файл .xlsx')
+        return redirect(url_for('product.index_view'))
+    return render_template('admin/import_products.html')
 
-            # Get localized labels
-            user_language = user.language_pref or "uk"
+@app.route('/webhook/paypal/simulate', methods=['POST'])
+def paypal_simulate():
+    data = request.get_json()
+    if not data or 'user_id' not in data or 'amount' not in data or 'paypal_id' not in data:
+        return jsonify({"error": "Invalid data"}), 400
 
-            name_label = await get_translation("name_label", user_language)
-            phone_label = await get_translation("phone_label", user_language)
-            balance_label = await get_translation("balance_label", user_language)
-            change_lang_btn = await get_translation("change_lang_btn", user_language)
+    user_id = data['user_id']
+    amount = data['amount']
+    paypal_id = data['paypal_id']
 
-            # Format profile message
-            profile_text = f"👤 <b>{await get_translation('profile_title', user_language)}</b>\n\n"
-            profile_text += f"{name_label}: {user.full_name or 'Не вказано'}\n"
-            profile_text += f"{phone_label}: {user.phone or 'Не вказано'}\n"
-            profile_text += f"{balance_label}: {user.balance:.2f} €\n"
+    with db.session() as session:
+        user = session.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
 
-            # Create inline keyboard with language toggle
-            builder = InlineKeyboardBuilder()
-            builder.button(text=change_lang_btn, callback_data="toggle_language")
+        # Create transaction
+        transaction = Transaction(
+            user_id=user_id,
+            amount=amount,
+            type=TransactionType.DEPOSIT,
+            status=TransactionStatus.COMPLETED,
+            external_id=paypal_id
+        )
+        session.add(transaction)
 
-            await message.answer(
-                profile_text,
-                reply_markup=builder.as_markup(),
-                parse_mode="HTML"
-            )
+        # Update balance
+        user.balance = (user.balance or 0.0) + amount
 
-    except Exception as e:
-        await message.answer("Сталася помилка при завантаженні профілю.")
+        session.commit()
 
-# Language toggle callback
-@router.callback_query(F.data == "toggle_language")
-async def toggle_language(callback: CallbackQuery):
-    """Toggle user's language preference between UK and DE."""
-    try:
-        async with async_session() as session:
-            user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+        return jsonify({"success": True, "new_balance": user.balance})
 
-            if not user:
-                await callback.answer("Користувача не знайдено.")
-                return
+@app.errorhandler(404)
+def page_not_found(e):
+    return '''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>404 - Page Not Found</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+            h1 { color: #e74c3c; font-size: 100px; margin: 0; }
+            p { font-size: 18px; color: #666; }
+            a { color: #3498db; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>404</h1>
+            <p>Page not found / Сторінку не знайдено</p>
+            <p>The page you are looking for might have been removed or is temporarily unavailable.</p>
+            <p><a href="/admin">Go back to Admin</a></p>
+        </div>
+    </body>
+    </html>
+    ''', 404
 
-            # Toggle language
-            new_language = "de" if user.language_pref == "uk" else "uk"
-            user.language_pref = new_language
+if __name__ == '__main__':
+    # Встановлюємо кодування для виводу в термінал прямо з коду
+    import sys
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-            await session.commit()
-
-            # Get confirmation message in new language
-            if new_language == "de":
-                confirm_msg = "Sprache zu Deutsch gewechselt! 🇩🇪"
-            else:
-                confirm_msg = "Мову змінено на українську! 🇺🇦"
-
-            await callback.answer(confirm_msg, show_alert=True)
-
-            # Refresh the profile view with updated language
-            await profile_handler(callback.message)
-
-            # Send updated main menu in new language
-            main_menu = await get_main_menu_keyboard(new_language)
-            welcome_text = await get_translation("welcome_message", new_language)
-            await callback.message.answer(f"{welcome_text} Оберіть розділ нижче 👇", reply_markup=main_menu)
-
-    except Exception as e:
-        await callback.answer("Помилка при зміні мови.")
-</file>
-
-<file path="core/models.py">
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, BigInteger, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
-from .database import Base
-import datetime
-from enum import Enum as PyEnum
-from flask_login import UserMixin
-
-class OrderStatus(PyEnum):
-    NEW = "NEW"
-    VERIFIED = "VERIFIED"
-    PROCUREMENT = "PROCUREMENT"
-    IN_DELIVERY = "IN_DELIVERY"
-    COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
-
-class LanguagePref(PyEnum):
-    uk = "uk"
-    de = "de"
-
-class AvailabilityStatus(PyEnum):
-    IN_STOCK = "IN_STOCK"
-    OUT_OF_STOCK = "OUT_OF_STOCK"
-    ON_REQUEST = "ON_REQUEST"
-
-class TransactionType(PyEnum):
-    DEPOSIT = "DEPOSIT"
-    PAYMENT = "PAYMENT"
-    REFUND = "REFUND"
-
-class TransactionStatus(PyEnum):
-    PENDING = "PENDING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-
-class User(Base, UserMixin):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    tg_id = Column(BigInteger, unique=True, index=True)
-    full_name = Column(String)
-    email = Column(String, unique=True)
-    username = Column(String, unique=True)
-    password_hash = Column(String, nullable=True)
-    phone = Column(String, nullable=True)
-    address = Column(Text)
-    is_trusted = Column(Boolean, default=False)
-    is_admin = Column(Boolean, default=False)
-    language_pref = Column(Enum(LanguagePref), default=LanguagePref.de)
-    admin_notes = Column(Text)
-    balance = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    orders = relationship("Order", back_populates="user")
-    transactions = relationship("Transaction", back_populates="user")
-    cart_items = relationship("CartItem", back_populates="user")
-
-    def __str__(self):
-        return self.full_name or self.username or f"User {self.id}"
-
-class Transaction(Base):
-    __tablename__ = "transactions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    amount = Column(Float)
-    type = Column(Enum(TransactionType))
-    status = Column(Enum(TransactionStatus))
-    external_id = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    user = relationship("User", back_populates="transactions")
-
-    def __str__(self):
-        return f"Transaction {self.id}: {self.type.value} {self.amount}"
-
-class CartItem(Base):
-    __tablename__ = "cart_items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
-    quantity = Column(Float, default=1.0)
-
-    user = relationship("User", back_populates="cart_items")
-    product = relationship("Product", back_populates="cart_items")
-
-    def __str__(self):
-        return f"CartItem {self.id}: {self.product.name} x{self.quantity}"
-
-class OrderItem(Base):
-    __tablename__ = "order_items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
-    quantity = Column(Float)
-    final_weight = Column(Float, nullable=True)
-    price_at_time = Column(Float)
-
-    order = relationship("Order", back_populates="items")
-    product = relationship("Product", back_populates="order_items")
-
-    def __str__(self):
-        return f"OrderItem {self.id}: {self.product.name} x{self.quantity}"
-
-class Farm(Base):
-    __tablename__ = "farms"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)
-    description_uk = Column(Text, nullable=True)
-    description_de = Column(Text, nullable=True)
-    location = Column(String(255), nullable=True)
-    contact_info = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True)
-    image_path = Column(String(255), nullable=True)
-
-    products = relationship("Product", back_populates="farm")
-
-    def __str__(self):
-        return self.name
-
-class Product(Base):
-    __tablename__ = "products"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    name_de = Column(String)
-    price = Column(Float)
-    unit = Column(String, default='kg')
-    sku = Column(String(50), unique=True, nullable=True)
-    availability_status = Column(Enum(AvailabilityStatus), default=AvailabilityStatus.IN_STOCK)
-    description = Column(Text)
-    description_de = Column(Text)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
-    image_path = Column(String(255), nullable=True)
-
-    category = relationship("Category", back_populates="products")
-    farm = relationship("Farm", back_populates="products")
-    cart_items = relationship("CartItem", back_populates="product")
-    order_items = relationship("OrderItem", back_populates="product")
-
-    def __str__(self):
-        return f"{self.name} ({self.farm.name if self.farm else 'No Farm'})"
-
-class Category(Base):
-    __tablename__ = "categories"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    name_de = Column(String)
-    slug = Column(String, unique=True)
-    image_url = Column(String)
-    description = Column(Text)
-    description_de = Column(Text)
-    image_path = Column(String(255), nullable=True)
-
-    products = relationship("Product", back_populates="category")
-
-    def __str__(self):
-        return self.name
-
-class Order(Base):
-    __tablename__ = "orders"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    status = Column(Enum(OrderStatus), default=OrderStatus.NEW)
-    total_price = Column(Float)
-    delivery_address = Column(Text)
-    contact_phone = Column(String)
-    delivery_slot = Column(String)
-    comment = Column(Text)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    user = relationship("User", back_populates="orders")
-    items = relationship("OrderItem", back_populates="order")
-
-class StaticPage(Base):
-    __tablename__ = "static_pages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String)
-    title_de = Column(String)
-    slug = Column(String, unique=True)
-    content = Column(Text)
-    content_de = Column(Text)
-    seo_title_uk = Column(String)
-    seo_title_de = Column(String)
-    seo_description_uk = Column(Text)
-    seo_description_de = Column(Text)
-
-class GlobalSettings(Base):
-    __tablename__ = "global_settings"
-
-    id = Column(Integer, primary_key=True, index=True)
-    key = Column(String, unique=True)
-    value = Column(Text)
-
-class Translation(Base):
-    __tablename__ = "translations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    key = Column(String, unique=True)
-    value_uk = Column(Text)
-    value_de = Column(Text)
+    print("🚀 Running on http://localhost:5000/admin")
+    app.run(host='0.0.0.0', port=5000, debug=False)
 </file>
 
 </files>
