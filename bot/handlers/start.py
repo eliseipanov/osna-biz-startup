@@ -351,7 +351,7 @@ async def profile_handler(message: Message, user_id: int = None):
                 return
 
             # Get localized labels
-            user_language = user.language_pref or "uk"
+            user_language = user.language_pref.value if user.language_pref else "uk"
 
             name_label = await get_translation("name_label", user_language)
             phone_label = await get_translation("phone_label", user_language)

@@ -129,10 +129,16 @@ async def show_category_products(callback: CallbackQuery):
                     product_name = get_localized_product_name(product, user_language)
                     product_description = get_localized_product_description(product, user_language)
 
+                    # Get localized price label
+                    price_label = await get_translation("price_label", user_language)
+
+                    # Translate unit for German users
+                    unit_display = "kg" if user_language == "de" and product.unit == "кг" else product.unit
+
                     caption = f"<b>{product_name}</b>\n\n"
                     if product_description:
                         caption += f"{product_description}\n\n"
-                    caption += f"💶 Ціна: {product.price} €/{product.unit}"
+                    caption += f"💶 {price_label}: {product.price} €/{unit_display}"
 
                     # Create inline keyboard for quantity control
                     builder = InlineKeyboardBuilder()
@@ -362,10 +368,16 @@ async def update_product_message(message: Message, product_id: int, user_id: int
             product_name = get_localized_product_name(product, user_language)
             product_description = get_localized_product_description(product, user_language)
 
+            # Get localized price label
+            price_label = await get_translation("price_label", user_language)
+
+            # Translate unit for German users
+            unit_display = "kg" if user_language == "de" and product.unit == "кг" else product.unit
+
             caption = f"<b>{product_name}</b>\n\n"
             if product_description:
                 caption += f"{product_description}\n\n"
-            caption += f"💶 Ціна: {product.price} €/{product.unit}"
+            caption += f"💶 {price_label}: {product.price} €/{unit_display}"
 
             # Create updated inline keyboard
             builder = InlineKeyboardBuilder()

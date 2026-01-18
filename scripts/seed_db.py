@@ -112,6 +112,13 @@ async def seed():
             {"key": "unit", "value_uk": "Одиниця", "value_de": "Einheit"},
             {"key": "availability", "value_uk": "Наявність", "value_de": "Verfügbarkeit"},
             {"key": "on_request", "value_uk": "Під замовлення", "value_de": "Auf Anfrage"},
+            {"key": "price_label", "value_uk": "Ціна", "value_de": "Preis"},
+            {"key": "name_label", "value_uk": "Ім'я", "value_de": "Name"},
+            {"key": "phone_label", "value_uk": "Телефон", "value_de": "Telefon"},
+            {"key": "balance_label", "value_uk": "Баланс", "value_de": "Guthaben"},
+            {"key": "change_lang_btn", "value_uk": "🌍 Змінити мову", "value_de": "🌍 Sprache ändern"},
+            {"key": "profile_title", "value_uk": "Ваш профіль", "value_de": "Ihre Angaben"},
+            {"key": "choose_section_hint", "value_uk": "Оберіть розділ нижче:", "value_de": "Wählen Sie einen Bereich aus:"},
         ]
 
         for trans_data in translations_data:
