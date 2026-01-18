@@ -111,6 +111,20 @@ class OrderItem(Base):
     def __str__(self):
         return f"OrderItem {self.id}: {self.product.name} x{self.quantity}"
 
+class Region(Base):
+    __tablename__ = "regions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    name_de = Column(String(100), nullable=False)
+    slug = Column(String(100), unique=True, nullable=False)
+
+    farms = relationship("Farm", back_populates="region")
+
+    def __str__(self):
+        return self.name
+
+
 class Farm(Base):
     __tablename__ = "farms"
 
@@ -122,8 +136,11 @@ class Farm(Base):
     contact_info = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     image_path = Column(String(255), nullable=True)
+    region_id = Column(Integer, ForeignKey("regions.id"), nullable=True)
+    farm_type = Column(String(50), nullable=True)
 
     products = relationship("Product", back_populates="farm")
+    region = relationship("Region", back_populates="farms")
 
     def __str__(self):
         return self.name

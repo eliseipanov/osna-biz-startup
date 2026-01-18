@@ -6,12 +6,30 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.database import async_session
-from core.models import Product, Category, Translation, Farm, AvailabilityStatus
-from sqlalchemy import text
+from core.models import Product, Category, Translation, Farm, AvailabilityStatus, Region
+from sqlalchemy import select, text
 
 async def seed():
     async with async_session() as session:
         # Idempotent seeding: check and add only if not exists
+
+        # Create regions first (check by slug)
+        regions_data = [
+            {"name": "Osnabrück", "name_de": "Osnabrück", "slug": "osnabruck"},
+        ]
+
+        regions = {}
+        for region_data in regions_data:
+            existing_region = await session.execute(select(Region).where(Region.slug == region_data["slug"]))
+            region = existing_region.scalar_one_or_none()
+            if not region:
+                region = Region(
+                    name=region_data["name"],
+                    name_de=region_data["name_de"],
+                    slug=region_data["slug"]
+                )
+                session.add(region)
+            regions[region_data["name"]] = region
 
         # Create categories first (check by slug)
         categories_data = [
@@ -36,7 +54,9 @@ async def seed():
 
         # Create farms (check by name)
         farms_data = [
-            {"name": "Homeyer GmbH", "location": "Osnabrück", "contact_info": "info@homeyer.de"},
+            {"name": "Homeyer GmbH", "location": "Osnabrück", "contact_info": "info@homeyer.de", "farm_type": "meat", "region": "Osnabrück"},
+            {"name": "Green Valley Farm", "location": "Osnabrück", "contact_info": "contact@greenvalley.de", "farm_type": "vegetables", "region": "Osnabrück"},
+            {"name": "Ocean Fresh", "location": "Osnabrück", "contact_info": "info@oceanfresh.de", "farm_type": "fish", "region": "Osnabrück"},
         ]
 
         farms = {}
@@ -47,7 +67,9 @@ async def seed():
                 farm = Farm(
                     name=farm_data["name"],
                     location=farm_data["location"],
-                    contact_info=farm_data["contact_info"]
+                    contact_info=farm_data["contact_info"],
+                    farm_type=farm_data["farm_type"],
+                    region=regions[farm_data["region"]]
                 )
                 session.add(farm)
             farms[farm_data["name"]] = farm
@@ -96,7 +118,7 @@ async def seed():
                     unit=p_data["unit"],
                     availability_status=AvailabilityStatus.IN_STOCK,
                     description=f"Fresh from Homeyer GmbH",
-                    category=categories[p_data["cat"]],
+                    categories=[categories[p_data["cat"]]],
                     farm=farms["Homeyer GmbH"]
                 )
                 session.add(p)

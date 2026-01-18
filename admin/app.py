@@ -45,10 +45,10 @@ def load_user(user_id):
         return session.execute(select(User).where(User.id == int(user_id))).scalar_one_or_none()
 
 # Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem, Region
 
 # Import views and routes
-from admin.admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView
+from admin.admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView, RegionView
 from admin.routes import admin_api
 
 
@@ -64,6 +64,7 @@ admin.add_view(ProductView(Product, db.session))
 admin.add_view(FarmView(Farm, db.session))
 admin.add_view(SecureModelView(Order, db.session))
 admin.add_view(CategoryView(Category, db.session))
+admin.add_view(RegionView(Region, db.session))
 admin.add_view(TransactionView(Transaction, db.session))
 admin.add_view(SecureModelView(CartItem, db.session))
 admin.add_view(SecureModelView(OrderItem, db.session))

@@ -17,7 +17,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import the views and forms
 from admin.admin_views import LoginForm
-from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus
+from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus, Region
 
 # Import shared db instance
 from extensions import db, admin
@@ -187,12 +187,42 @@ def paypal_simulate():
 
         return jsonify({"success": True, "new_balance": user.balance})
 
+@admin_api.route('/webapp')
+def webapp():
+    """Serve the WebApp interface."""
+    return render_template('webapp/index.html')
+
 # WebApp API Endpoints
+@admin_api.route('/api/catalog/regions')
+def api_regions():
+    """Return list of regions for the WebApp."""
+    with db.session() as session:
+        regions = session.execute(select(Region)).scalars().all()
+        regions_data = []
+        for region in regions:
+            regions_data.append({
+                'id': region.id,
+                'name': region.name,
+                'name_de': region.name_de,
+                'slug': region.slug
+            })
+        return jsonify(regions_data)
+
 @admin_api.route('/api/catalog/farms')
 def api_farms():
-    """Return list of active farms for the WebApp."""
+    """Return list of active farms for the WebApp, optionally filtered by region_id and farm_type."""
+    region_id = request.args.get('region_id', type=int)
+    farm_type = request.args.get('farm_type', type=str)
+
     with db.session() as session:
-        farms = session.execute(select(Farm).where(Farm.is_active == True)).scalars().all()
+        query = select(Farm).where(Farm.is_active == True)
+
+        if region_id:
+            query = query.where(Farm.region_id == region_id)
+        if farm_type:
+            query = query.where(Farm.farm_type == farm_type)
+
+        farms = session.execute(query).scalars().all()
         farms_data = []
         for farm in farms:
             farms_data.append({
@@ -202,7 +232,9 @@ def api_farms():
                 'description_de': farm.description_de,
                 'location': farm.location,
                 'contact_info': farm.contact_info,
-                'image_path': farm.image_path
+                'image_path': farm.image_path,
+                'region_id': farm.region_id,
+                'farm_type': farm.farm_type
             })
         return jsonify(farms_data)
 

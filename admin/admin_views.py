@@ -16,7 +16,7 @@ from wtforms.validators import DataRequired
 from markupsafe import Markup
 
 # Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
+from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem, Region
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -77,6 +77,15 @@ class CategoryView(SecureModelView):
         'image_path': FileUploadField('Зображення', base_path='static/uploads', allowed_extensions=['jpg', 'jpeg', 'png', 'gif'])
     }
 
+# Кастомна в'юха для регіонів
+class RegionView(SecureModelView):
+    column_labels = {
+        'id': 'ID',
+        'name': 'Назва (Укр)',
+        'name_de': 'Назва (Нім)',
+        'slug': 'Слаг'
+    }
+
 # Кастомна в'юха для ферм
 class FarmView(SecureModelView):
     column_labels = {
@@ -87,7 +96,9 @@ class FarmView(SecureModelView):
         'location': 'Місцезнаходження',
         'contact_info': 'Контактна інформація',
         'is_active': 'Активний',
-        'image_path': 'Шлях до зображення'
+        'image_path': 'Шлях до зображення',
+        'region': 'Регіон',
+        'farm_type': 'Тип ферми'
     }
     column_formatters = {
         'image_path': lambda v, c, m, p: Markup(f'<img src="/static/uploads/{m.image_path}" width="50" height="50" alt="No image">') if m.image_path else 'No image'

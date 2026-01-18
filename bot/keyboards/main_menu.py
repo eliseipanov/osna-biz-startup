@@ -1,4 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from sqlalchemy import select
 from core.database import async_session
 from core.models import Translation
@@ -29,7 +29,7 @@ async def get_main_menu_keyboard(user_language="uk"):
                             else impressum_trans.value_uk if impressum_trans else "ℹ️ Impressum")
 
             keyboard = [
-                [KeyboardButton(text=catalog_text)],
+                [KeyboardButton(text=catalog_text, web_app=WebAppInfo(url="https://7568db916eec.ngrok-free.app/webapp"))],
                 [KeyboardButton(text=profile_text)],
                 [KeyboardButton(text=impressum_text)]
             ]
@@ -37,7 +37,7 @@ async def get_main_menu_keyboard(user_language="uk"):
     except Exception as e:
         # Fallback to hardcoded English if database error
         keyboard = [
-            [KeyboardButton(text="🥩 Catalog")],
+            [KeyboardButton(text="🥩 Catalog", web_app=WebAppInfo(url="https://7568db916eec.ngrok-free.app/webapp"))],
             [KeyboardButton(text="👤 Profile")],
             [KeyboardButton(text="ℹ️ Impressum")]
         ]

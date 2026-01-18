@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FARM CONNECT</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #121212;
+            color: #E0E0E0;
+        }
+        .gold-text {
+            color: #D4AF37;
+        }
+        .gold-bg {
+            background-color: #D4AF37;
+        }
+        .gold-border {
+            border-color: #D4AF37;
+        }
+        .dark-bg {
+            background-color: #121212;
+        }
+        .silver-text {
+            color: #E0E0E0;
+        }
+    </style>
+</head>
+<body class="dark-bg min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-700 py-4 px-6">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <h1 class="text-2xl font-bold gold-text">FARM CONNECT</h1>
+            <div class="text-sm silver-text">Premium Farm Products</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Regions Section -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-4 gold-text">Select Region</h2>
+            <div id="regions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Regions will be loaded here -->
+            </div>
+        </section>
+
+        <!-- Farm Types Section -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-4 gold-text">Farm Types</h2>
+            <div id="farm-types-list" class="flex flex-wrap gap-3">
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="meat">
+                    🥩 Meat
+                </button>
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="vegetables">
+                    🥕 Vegetables
+                </button>
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="fish">
+                    🐟 Fish
+                </button>
+            </div>
+        </section>
+
+        <!-- Farms Section -->
+        <section>
+            <h2 class="text-xl font-semibold mb-4 gold-text">Available Farms</h2>
+            <div id="farms-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Farms will be loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- JavaScript -->
+    <script>
+        let selectedRegion = null;
+        let selectedFarmType = null;
+
+        // Load regions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRegions();
+            loadFarms();
+        });
+
+        // Region selection
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('region-btn')) {
+                // Remove active class from all region buttons
+                document.querySelectorAll('.region-btn').forEach(btn => {
+                    btn.classList.remove('gold-bg', 'text-black');
+                    btn.classList.add('bg-gray-800', 'text-silver');
+                });
+
+                // Add active class to clicked button
+                e.target.classList.remove('bg-gray-800', 'text-silver');
+                e.target.classList.add('gold-bg', 'text-black');
+
+                selectedRegion = e.target.dataset.regionId;
+                loadFarms();
+            }
+
+            if (e.target.classList.contains('farm-type-btn')) {
+                // Remove active class from all farm type buttons
+                document.querySelectorAll('.farm-type-btn').forEach(btn => {
+                    btn.classList.remove('gold-bg', 'text-black');
+                    btn.classList.add('bg-gray-800', 'text-silver');
+                });
+
+                // Add active class to clicked button
+                e.target.classList.remove('bg-gray-800', 'text-silver');
+                e.target.classList.add('gold-bg', 'text-black');
+
+                selectedFarmType = e.target.dataset.type;
+                loadFarms();
+            }
+        });
+
+        async function loadRegions() {
+            try {
+                const response = await fetch('/api/catalog/regions');
+                const regions = await response.json();
+
+                const regionsList = document.getElementById('regions-list');
+                regionsList.innerHTML = '';
+
+                regions.forEach(region => {
+                    const regionCard = document.createElement('div');
+                    regionCard.className = 'region-btn p-4 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg cursor-pointer transition-colors';
+                    regionCard.dataset.regionId = region.id;
+                    regionCard.innerHTML = `
+                        <h3 class="font-semibold">${region.name}</h3>
+                        <p class="text-sm opacity-75">${region.name_de}</p>
+                    `;
+                    regionsList.appendChild(regionCard);
+                });
+            } catch (error) {
+                console.error('Error loading regions:', error);
+            }
+        }
+
+        async function loadFarms() {
+            try {
+                let url = '/api/catalog/farms';
+                const params = new URLSearchParams();
+
+                if (selectedRegion) {
+                    params.append('region_id', selectedRegion);
+                }
+                if (selectedFarmType) {
+                    params.append('farm_type', selectedFarmType);
+                }
+
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+
+                const response = await fetch(url);
+                const farms = await response.json();
+
+                const farmsList = document.getElementById('farms-list');
+                farmsList.innerHTML = '';
+
+                if (farms.length === 0) {
+                    farmsList.innerHTML = '<p class="text-silver col-span-full text-center py-8">No farms found for the selected criteria.</p>';
+                    return;
+                }
+
+                farms.forEach(farm => {
+                    const farmCard = document.createElement('div');
+                    farmCard.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
+                    farmCard.innerHTML = `
+                        <div class="p-6">
+                            <h3 class="text-lg font-semibold mb-2 gold-text">${farm.name}</h3>
+                            <p class="text-sm text-silver mb-3">${farm.description_uk || farm.description_de || 'No description available'}</p>
+                            <div class="flex items-center justify-between text-sm">
+                                <span class="text-silver">${farm.location || 'Location not specified'}</span>
+                                <span class="gold-text font-medium">${farm.farm_type || 'Type not specified'}</span>
+                            </div>
+                        </div>
+                    `;
+                    farmsList.appendChild(farmCard);
+                });
+            } catch (error) {
+                console.error('Error loading farms:', error);
+            }
+        }
+    </script>
+</body>
+</html>
