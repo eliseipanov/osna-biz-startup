@@ -12,14 +12,15 @@ import os
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import login_user, login_required, logout_user, current_user
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import the views and forms
-from admin_views import LoginForm
+from admin.admin_views import LoginForm
 from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus
 
 # Import shared db instance
-from extensions import db
+from extensions import db, admin
 
 # Create the blueprint
 admin_api = Blueprint('admin_api', __name__)
@@ -96,20 +97,25 @@ def export_products():
     import os
     from core.utils.excel_manager import export_products_to_excel_sync
 
-    # Get the filtered products from ProductView
+    # Find the ProductView instance
     product_view = None
-    from flask import current_app
-    admin = current_app.extensions.get('admin')
-    if admin:
-        for view in admin._views:
-            if hasattr(view, 'endpoint') and view.endpoint == 'product':
-                product_view = view
-                break
+    for view in admin._views:
+        if hasattr(view, 'model') and view.model == Product:
+            product_view = view
+            break
+
     if product_view:
-        # Get arguments
+        # Get filter context from request.args
         v_args = product_view._get_list_extra_args()
-        # Fetch data
-        count, products = product_view.get_list(page=0, sort_column=v_args.sort, sort_desc=v_args.sort_desc, search=v_args.search, filters=v_args.filters, page_size=10000)
+        # Use official get_list method with large page_size to get all results
+        count, products = product_view.get_list(
+            page=0,
+            sort_column=v_args.sort,
+            sort_desc=v_args.sort_desc,
+            search=v_args.search,
+            filters=v_args.filters,
+            page_size=10000  # Large number to get all matching records
+        )
     else:
         products = None
 

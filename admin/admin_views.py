@@ -31,6 +31,7 @@ class SecureModelView(ModelView):
 class ProductView(SecureModelView):
     column_list = ('id', 'name', 'name_de', 'price', 'unit', 'sku', 'availability_status', 'categories', 'farm', 'image_path')
     column_display_pk = True
+    column_default_sort = ('id', False)
     # can_export = True  # Disabled to use custom XLSX export
     column_filters = ['categories', 'farm', 'availability_status']
     column_searchable_list = ['name', 'sku']

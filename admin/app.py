@@ -5,13 +5,11 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Flask
-from flask_admin import Admin
-from flask_admin.theme import Bootstrap4Theme
 from flask_admin.menu import MenuLink
 from dotenv import load_dotenv
 
 # Import shared extensions
-from extensions import db, login_manager, limiter
+from extensions import db, login_manager, limiter, admin
 
 load_dotenv()
 
@@ -37,6 +35,7 @@ db.init_app(app)
 login_manager.init_app(app)
 login_manager.login_view = 'admin_api.login'
 limiter.init_app(app)
+admin.init_app(app)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -49,19 +48,12 @@ def load_user(user_id):
 from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
 
 # Import views and routes
-from admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView
-from routes import admin_api
+from admin.admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView
+from admin.routes import admin_api
 
 
 # Register the blueprint
 app.register_blueprint(admin_api)
-
-admin_theme = Bootstrap4Theme(
-    swatch='sandstone',
-    base_template='admin/master.html'
-)
-
-admin = Admin(app, name='Osna Farm', theme=admin_theme)
 
 # Add logout menu item
 admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
