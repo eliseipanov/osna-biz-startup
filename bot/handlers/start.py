@@ -33,9 +33,11 @@ async def start_handler(message: Message, state: FSMContext):
 
             # If user exists and has completed onboarding (has phone), show main menu
             if user and user.phone:
-                main_menu = await get_main_menu_keyboard(user.language_pref or "uk")
-                welcome_text = await get_translation("welcome_message", user.language_pref or "uk")
-                choose_hint = await get_translation("choose_section_hint", user.language_pref or "uk")
+                # IMMEDIATELY use the database language preference
+                current_lang = user.language_pref.value if user.language_pref else "uk"
+                main_menu = await get_main_menu_keyboard(current_lang)
+                welcome_text = await get_translation("welcome_message", current_lang)
+                choose_hint = await get_translation("choose_section_hint", current_lang)
                 await message.answer(f"{welcome_text} {choose_hint}", reply_markup=main_menu)
                 return
 
@@ -383,14 +385,16 @@ async def toggle_language(callback: CallbackQuery):
     """Toggle user's language preference between UK and DE."""
     try:
         async with async_session() as session:
+            # Re-fetch user from DB to get ABSOLUTE current state
             user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
 
             if not user:
                 await callback.answer("Користувача не знайдено.")
                 return
 
-            # Toggle language
-            new_language = "de" if user.language_pref.value == "uk" else "uk"
+            # Toggle language based on current DB state
+            current_lang = user.language_pref.value if user.language_pref else "uk"
+            new_language = "de" if current_lang == "uk" else "uk"
             user.language_pref = new_language
 
             await session.commit()
