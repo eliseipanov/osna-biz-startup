@@ -59,7 +59,7 @@ async def show_categories(message: Message):
         async with async_session() as session:
             # Get user language preference
             user = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
-            user_language = user.language_pref if user else "uk"
+            user_language = user.language_pref.value if user and user.language_pref else "uk"
 
             # Get all categories
             categories = await session.scalars(select(Category))
@@ -100,7 +100,7 @@ async def show_category_products(callback: CallbackQuery):
         async with async_session() as session:
             # Get user language preference
             user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
-            user_language = user.language_pref if user else "uk"
+            user_language = user.language_pref.value if user and user.language_pref else "uk"
 
             # Get category and its products
             category = await session.get(Category, category_id)
@@ -300,7 +300,7 @@ async def back_to_categories(callback: CallbackQuery):
         async with async_session() as session:
             # Get user language preference
             user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
-            user_language = user.language_pref if user else "uk"
+            user_language = user.language_pref.value if user and user.language_pref else "uk"
 
             # Get all categories
             categories = await session.scalars(select(Category))
@@ -343,7 +343,7 @@ async def update_product_message(message: Message, product_id: int, user_id: int
         async with async_session() as session:
             # Get user language preference
             user = await session.scalar(select(User).where(User.tg_id == user_id))
-            user_language = user.language_pref if user else "uk"
+            user_language = user.language_pref.value if user and user.language_pref else "uk"
 
             # Get product and cart item
             product = await session.get(Product, product_id)
