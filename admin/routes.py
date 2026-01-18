@@ -1,91 +1,34 @@
 import os
 import sys
+import traceback
+from datetime import datetime
 
 # Додаємо корінь проекту до шляхів
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from flask import Flask
+from flask import Blueprint, redirect, url_for, flash, request, render_template, send_file, jsonify
+import tempfile
+import os
 from flask_sqlalchemy import SQLAlchemy
-from flask_admin import Admin
-from flask_admin.theme import Bootstrap4Theme
-from flask_admin.menu import MenuLink
-from flask_login import LoginManager
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from dotenv import load_dotenv
+from flask_login import login_user, login_required, logout_user, current_user
+from sqlalchemy import select
+from werkzeug.security import generate_password_hash, check_password_hash
 
-load_dotenv()
+# Import the views and forms
+from admin_views import LoginForm
+from core.models import User, Transaction, TransactionType, TransactionStatus
 
-app = Flask(__name__, template_folder='../templates', static_folder='../static')
+# Create the blueprint
+admin_api = Blueprint('admin_api', __name__)
 
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY")
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB limit
+# This will be set from the main app
+db = None
 
-# Налаштування бази
-DATABASE_URL = os.getenv("DATABASE_URL").replace("postgresql+asyncpg", "postgresql")
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+def init_db(sql_db):
+    global db
+    db = sql_db
 
-# Це примусово лікує UnicodeDecodeError на рівні підключення
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    "connect_args": {
-        "options": "-c client_encoding=utf8"
-    }
-}
-
-db = SQLAlchemy(app)
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'admin_api.login'
-
-limiter = Limiter(get_remote_address, app=app)
-
-@login_manager.user_loader
-def load_user(user_id):
-    from sqlalchemy import select
-    from core.models import User
-    with db.session() as session:
-        return session.execute(select(User).where(User.id == int(user_id))).scalar_one_or_none()
-
-# Імпортуємо моделі ПІСЛЯ ініціалізації db, щоб уникнути циклічних імпортів
-from core.models import User, Product, Order, Category, StaticPage, GlobalSettings, Translation, Farm, Transaction, TransactionType, TransactionStatus, CartItem, OrderItem
-
-# Import views and routes
-from admin_views import UserView, ProductView, FarmView, CategoryView, TransactionView, SecureModelView
-from routes import admin_api
-
-# Initialize the db reference in routes
-admin_api.init_db(db)
-
-# Register the blueprint
-app.register_blueprint(admin_api)
-
-admin_theme = Bootstrap4Theme(
-    swatch='sandstone',
-    base_template='admin/master.html'
-)
-
-admin = Admin(app, name='Osna Farm', theme=admin_theme)
-
-# Add logout menu item
-admin.add_link(MenuLink(name='Logout', category='', url='/admin/logout'))
-
-# Додаємо в'юхи правильно
-admin.add_view(UserView(User, db.session))
-admin.add_view(ProductView(Product, db.session))
-admin.add_view(FarmView(Farm, db.session))
-admin.add_view(SecureModelView(Order, db.session))
-admin.add_view(CategoryView(Category, db.session))
-admin.add_view(TransactionView(Transaction, db.session))
-admin.add_view(SecureModelView(CartItem, db.session))
-admin.add_view(SecureModelView(OrderItem, db.session))
-admin.add_view(SecureModelView(StaticPage, db.session))
-admin.add_view(SecureModelView(GlobalSettings, db.session))
-admin.add_view(SecureModelView(Translation, db.session))
-
-@app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per 15 minutes")
+@admin_api.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('admin.index'))
@@ -141,13 +84,13 @@ def login():
                 flash('User not found')
     return render_template('admin/login.html', form=form)
 
-@app.route('/admin/logout')
+@admin_api.route('/admin/logout')
 @login_required
 def admin_logout():
     logout_user()
-    return redirect(url_for('login'))
+    return redirect(url_for('admin_api.login'))
 
-@app.route('/admin/export_products')
+@admin_api.route('/admin/export_products')
 @login_required
 def export_products():
     if not current_user.is_admin:
@@ -159,10 +102,13 @@ def export_products():
 
     # Get the filtered products from ProductView
     product_view = None
-    for view in admin._views:
-        if hasattr(view, 'endpoint') and view.endpoint == 'product':
-            product_view = view
-            break
+    from flask import current_app
+    admin = current_app.extensions.get('admin')
+    if admin:
+        for view in admin._views:
+            if hasattr(view, 'endpoint') and view.endpoint == 'product':
+                product_view = view
+                break
     if product_view:
         # Get arguments
         v_args = product_view._get_list_extra_args()
@@ -183,7 +129,7 @@ def export_products():
             flash(f'Помилка експорту: {str(e)}')
             return redirect(url_for('product.index_view'))
 
-@app.route('/admin/import_products', methods=['GET', 'POST'])
+@admin_api.route('/admin/import_products', methods=['GET', 'POST'])
 @login_required
 def import_products():
     if not current_user.is_admin:
@@ -207,7 +153,7 @@ def import_products():
         return redirect(url_for('product.index_view'))
     return render_template('admin/import_products.html')
 
-@app.route('/webhook/paypal/simulate', methods=['POST'])
+@admin_api.route('/webhook/paypal/simulate', methods=['POST'])
 def paypal_simulate():
     data = request.get_json()
     if not data or 'user_id' not in data or 'amount' not in data or 'paypal_id' not in data:
@@ -238,41 +184,6 @@ def paypal_simulate():
         session.commit()
 
         return jsonify({"success": True, "new_balance": user.balance})
-
-@app.errorhandler(404)
-def page_not_found(e):
-    return '''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>404 - Page Not Found</title>
-        <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f4; }
-            .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-            h1 { color: #e74c3c; font-size: 100px; margin: 0; }
-            p { font-size: 18px; color: #666; }
-            a { color: #3498db; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>404</h1>
-            <p>Page not found / Сторінку не знайдено</p>
-            <p>The page you are looking for might have been removed or is temporarily unavailable.</p>
-            <p><a href="/admin">Go back to Admin</a></p>
-        </div>
-    </body>
-    </html>
-    ''', 404
-
-if __name__ == '__main__':
-    # Встановлюємо кодування для виводу в термінал прямо з коду
-    import sys
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
-    print("🚀 Running on http://localhost:5000/admin")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+#    </content>
+# </xai:function_call name="update_todo_list">
+# <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]

@@ -1,9 +1,17 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, BigInteger, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, BigInteger, DateTime, ForeignKey, Enum, Table
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
 from enum import Enum as PyEnum
 from flask_login import UserMixin
+
+# Junction table for many-to-many relationship between Product and Category
+product_categories_association = Table(
+    'product_categories_association',
+    Base.metadata,
+    Column('product_id', Integer, ForeignKey('products.id'), primary_key=True),
+    Column('category_id', Integer, ForeignKey('categories.id'), primary_key=True)
+)
 
 class OrderStatus(PyEnum):
     NEW = "NEW"
@@ -132,11 +140,10 @@ class Product(Base):
     availability_status = Column(Enum(AvailabilityStatus), default=AvailabilityStatus.IN_STOCK)
     description = Column(Text)
     description_de = Column(Text)
-    category_id = Column(Integer, ForeignKey("categories.id"))
     farm_id = Column(Integer, ForeignKey("farms.id"), nullable=True)
     image_path = Column(String(255), nullable=True)
 
-    category = relationship("Category", back_populates="products")
+    categories = relationship("Category", secondary="product_categories_association", back_populates="products")
     farm = relationship("Farm", back_populates="products")
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product")
@@ -156,7 +163,7 @@ class Category(Base):
     description_de = Column(Text)
     image_path = Column(String(255), nullable=True)
 
-    products = relationship("Product", back_populates="category")
+    products = relationship("Product", secondary="product_categories_association", back_populates="categories")
 
     def __str__(self):
         return self.name
