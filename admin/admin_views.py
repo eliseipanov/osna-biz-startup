@@ -126,6 +126,3 @@ class TransactionView(SecureModelView):
         'external_id': 'Зовнішній ID',
         'created_at': 'Дата створення'
     }
-#    </content>
-# </xai:function_call name="update_todo_list">
-# <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]

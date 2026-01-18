@@ -36,7 +36,7 @@ def export_products_to_excel_sync(db_session, file_path: str, query=None, produc
             'availability_status': p.availability_status.value if p.availability_status else None,
             'description': safe_encode_for_sql_ascii(p.description),
             'description_de': safe_encode_for_sql_ascii(p.description_de),
-            'category_name': safe_encode_for_sql_ascii(p.category.name) if p.category else None,
+            'category_names': safe_encode_for_sql_ascii(", ".join([c.name for c in p.categories])) if p.categories else None,
             'farm_name': safe_encode_for_sql_ascii(p.farm.name) if p.farm else None,
             'image_path': p.image_path
         })
@@ -107,11 +107,15 @@ def import_products_from_excel_sync(db_session, file_path: str):
                             existing_product.image_path = str(row.get('image_path')).strip()
                         if not pd.isna(row.get('availability_status')):
                             existing_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
-                        # Link relationships by name
-                        if not pd.isna(row.get('category_name')):
-                            category = db_session.execute(select(Category).where(Category.name == str(row.get('category_name')))).scalar_one_or_none()
-                            if category:
-                                existing_product.category_id = category.id
+                        # Link relationships by name (multiple categories)
+                        if not pd.isna(row.get('category_names')):
+                            category_names = [name.strip() for name in str(row.get('category_names')).split(',') if name.strip()]
+                            categories = []
+                            for cat_name in category_names:
+                                category = db_session.execute(select(Category).where(Category.name == cat_name)).scalar_one_or_none()
+                                if category:
+                                    categories.append(category)
+                            existing_product.categories = categories
                         if not pd.isna(row.get('farm_name')):
                             farm = db_session.execute(select(Farm).where(Farm.name == str(row.get('farm_name')))).scalar_one_or_none()
                             if farm:
@@ -132,11 +136,15 @@ def import_products_from_excel_sync(db_session, file_path: str):
                         # Set availability_status if provided
                         if not pd.isna(row.get('availability_status')):
                             new_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
-                        # Link relationships by name
-                        if not pd.isna(row.get('category_name')):
-                            category = db_session.execute(select(Category).where(Category.name == str(row.get('category_name')))).scalar_one_or_none()
-                            if category:
-                                new_product.category_id = category.id
+                        # Link relationships by name (multiple categories)
+                        if not pd.isna(row.get('category_names')):
+                            category_names = [name.strip() for name in str(row.get('category_names')).split(',') if name.strip()]
+                            categories = []
+                            for cat_name in category_names:
+                                category = db_session.execute(select(Category).where(Category.name == cat_name)).scalar_one_or_none()
+                                if category:
+                                    categories.append(category)
+                            new_product.categories = categories
                         if not pd.isna(row.get('farm_name')):
                             farm = db_session.execute(select(Farm).where(Farm.name == str(row.get('farm_name')))).scalar_one_or_none()
                             if farm:
@@ -240,12 +248,16 @@ async def import_products_from_excel(file_path: str):
                                 existing_product.image_path = str(row.get('image_path'))
                             if not pd.isna(row.get('availability_status')):
                                 existing_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
-                            # Link relationships by name
-                            if not pd.isna(row.get('category_name')):
-                                category = await session.execute(select(Category).where(Category.name == str(row.get('category_name'))))
-                                category = category.scalar_one_or_none()
-                                if category:
-                                    existing_product.category_id = category.id
+                            # Link relationships by name (multiple categories)
+                            if not pd.isna(row.get('category_names')):
+                                category_names = [name.strip() for name in str(row.get('category_names')).split(',') if name.strip()]
+                                categories = []
+                                for cat_name in category_names:
+                                    category = await session.execute(select(Category).where(Category.name == cat_name))
+                                    category = category.scalar_one_or_none()
+                                    if category:
+                                        categories.append(category)
+                                existing_product.categories = categories
                             if not pd.isna(row.get('farm_name')):
                                 farm = await session.execute(select(Farm).where(Farm.name == str(row.get('farm_name'))))
                                 farm = farm.scalar_one_or_none()
@@ -269,12 +281,16 @@ async def import_products_from_excel(file_path: str):
                             # Set availability_status if provided
                             if not pd.isna(row.get('availability_status')):
                                 new_product.availability_status = AvailabilityStatus(str(row.get('availability_status')))
-                            # Link relationships by name
-                            if not pd.isna(row.get('category_name')):
-                                category = await session.execute(select(Category).where(Category.name == str(row.get('category_name'))))
-                                category = category.scalar_one_or_none()
-                                if category:
-                                    new_product.category_id = category.id
+                            # Link relationships by name (multiple categories)
+                            if not pd.isna(row.get('category_names')):
+                                category_names = [name.strip() for name in str(row.get('category_names')).split(',') if name.strip()]
+                                categories = []
+                                for cat_name in category_names:
+                                    category = await session.execute(select(Category).where(Category.name == cat_name))
+                                    category = category.scalar_one_or_none()
+                                    if category:
+                                        categories.append(category)
+                                new_product.categories = categories
                             if not pd.isna(row.get('farm_name')):
                                 farm = await session.execute(select(Farm).where(Farm.name == str(row.get('farm_name'))))
                                 farm = farm.scalar_one_or_none()
