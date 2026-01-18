@@ -29,7 +29,7 @@ async def get_main_menu_keyboard(user_language="uk"):
                             else impressum_trans.value_uk if impressum_trans else "ℹ️ Impressum")
 
             keyboard = [
-                [KeyboardButton(text=catalog_text, web_app=WebAppInfo(url="https://7568db916eec.ngrok-free.app/webapp"))],
+                [KeyboardButton(text=catalog_text, web_app=WebAppInfo(url=f"https://7568db916eec.ngrok-free.app/webapp?lang={user_language}"))],
                 [KeyboardButton(text=profile_text)],
                 [KeyboardButton(text=impressum_text)]
             ]
@@ -37,7 +37,7 @@ async def get_main_menu_keyboard(user_language="uk"):
     except Exception as e:
         # Fallback to hardcoded English if database error
         keyboard = [
-            [KeyboardButton(text="🥩 Catalog", web_app=WebAppInfo(url="https://7568db916eec.ngrok-free.app/webapp"))],
+            [KeyboardButton(text="🥩 Catalog", web_app=WebAppInfo(url=f"https://7568db916eec.ngrok-free.app/webapp?lang={user_language}"))],
             [KeyboardButton(text="👤 Profile")],
             [KeyboardButton(text="ℹ️ Impressum")]
         ]

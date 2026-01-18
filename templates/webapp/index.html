@@ -30,11 +30,16 @@
     </style>
 </head>
 <body class="dark-bg min-h-screen">
-    <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-700 py-4 px-6">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <h1 class="text-2xl font-bold gold-text">FARM CONNECT</h1>
-            <div class="text-sm silver-text">Premium Farm Products</div>
+    <!-- Hero Header -->
+    <header class="relative">
+        <div class="w-full h-64 md:h-80 lg:h-96 overflow-hidden">
+            <img src="/static/uploads/hero.jpg" alt="Farm Connect Hero" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                <div class="text-center">
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold gold-text mb-4" id="hero-title">FARM CONNECT</h1>
+                    <p class="text-lg md:text-xl silver-text" id="hero-subtitle">Premium Farm Products</p>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -42,7 +47,7 @@
     <main class="max-w-7xl mx-auto px-6 py-8">
         <!-- Regions Section -->
         <section class="mb-8">
-            <h2 class="text-xl font-semibold mb-4 gold-text">Select Region</h2>
+            <h2 class="text-xl font-semibold mb-4 gold-text" id="select-region-title">Select Region</h2>
             <div id="regions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <!-- Regions will be loaded here -->
             </div>
@@ -50,15 +55,15 @@
 
         <!-- Farm Types Section -->
         <section class="mb-8">
-            <h2 class="text-xl font-semibold mb-4 gold-text">Farm Types</h2>
+            <h2 class="text-xl font-semibold mb-4 gold-text" id="farm-types-title">Farm Types</h2>
             <div id="farm-types-list" class="flex flex-wrap gap-3">
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="meat">
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="meat" id="meat-type">
                     🥩 Meat
                 </button>
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="vegetables">
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="vegetables" id="vegetables-type">
                     🥕 Vegetables
                 </button>
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="fish">
+                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="fish" id="fish-type">
                     🐟 Fish
                 </button>
             </div>
@@ -66,7 +71,7 @@
 
         <!-- Farms Section -->
         <section>
-            <h2 class="text-xl font-semibold mb-4 gold-text">Available Farms</h2>
+            <h2 class="text-xl font-semibold mb-4 gold-text" id="available-farms-title">Available Farms</h2>
             <div id="farms-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <!-- Farms will be loaded here -->
             </div>
@@ -77,45 +82,80 @@
     <script>
         let selectedRegion = null;
         let selectedFarmType = null;
+        let translations = {};
+        let userLanguage = 'uk';
 
-        // Load regions on page load
+        // Get language from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        userLanguage = urlParams.get('lang') || 'uk';
+
+        // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
-            loadRegions();
-            loadFarms();
+            loadTranslations();
         });
 
         // Region selection
         document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('region-btn')) {
+            if (e.target.classList.contains('region-btn') || e.target.closest('.region-btn')) {
+                const btn = e.target.closest('.region-btn');
                 // Remove active class from all region buttons
-                document.querySelectorAll('.region-btn').forEach(btn => {
-                    btn.classList.remove('gold-bg', 'text-black');
-                    btn.classList.add('bg-gray-800', 'text-silver');
+                document.querySelectorAll('.region-btn').forEach(b => {
+                    b.classList.remove('gold-bg', 'text-black');
+                    b.classList.add('bg-gray-800', 'text-silver');
                 });
 
                 // Add active class to clicked button
-                e.target.classList.remove('bg-gray-800', 'text-silver');
-                e.target.classList.add('gold-bg', 'text-black');
+                btn.classList.remove('bg-gray-800', 'text-silver');
+                btn.classList.add('gold-bg', 'text-black');
 
-                selectedRegion = e.target.dataset.regionId;
+                selectedRegion = btn.dataset.regionId;
                 loadFarms();
             }
 
-            if (e.target.classList.contains('farm-type-btn')) {
+            if (e.target.classList.contains('farm-type-btn') || e.target.closest('.farm-type-btn')) {
+                const btn = e.target.closest('.farm-type-btn');
                 // Remove active class from all farm type buttons
-                document.querySelectorAll('.farm-type-btn').forEach(btn => {
-                    btn.classList.remove('gold-bg', 'text-black');
-                    btn.classList.add('bg-gray-800', 'text-silver');
+                document.querySelectorAll('.farm-type-btn').forEach(b => {
+                    b.classList.remove('gold-bg', 'text-black');
+                    b.classList.add('bg-gray-800', 'text-silver');
                 });
 
                 // Add active class to clicked button
-                e.target.classList.remove('bg-gray-800', 'text-silver');
-                e.target.classList.add('gold-bg', 'text-black');
+                btn.classList.remove('bg-gray-800', 'text-silver');
+                btn.classList.add('gold-bg', 'text-black');
 
-                selectedFarmType = e.target.dataset.type;
+                selectedFarmType = btn.dataset.type;
                 loadFarms();
             }
         });
+
+        async function loadTranslations() {
+            try {
+                const response = await fetch(`/api/ui/translations?lang=${userLanguage}`);
+                translations = await response.json();
+
+                // Update UI text
+                document.getElementById('hero-title').textContent = translations.farm_connect_title || 'FARM CONNECT';
+                document.getElementById('hero-subtitle').textContent = translations.premium_farm_products || 'Premium Farm Products';
+                document.getElementById('select-region-title').textContent = translations.select_region || 'Select Region';
+                document.getElementById('farm-types-title').textContent = translations.farm_types || 'Farm Types';
+                document.getElementById('available-farms-title').textContent = translations.available_farms || 'Available Farms';
+
+                // Update farm type buttons
+                document.getElementById('meat-type').textContent = `🥩 ${translations.meat_type || 'Meat'}`;
+                document.getElementById('vegetables-type').textContent = `🥕 ${translations.vegetables_type || 'Vegetables'}`;
+                document.getElementById('fish-type').textContent = `🐟 ${translations.fish_type || 'Fish'}`;
+
+                // Now load other data
+                loadRegions();
+                loadFarms();
+            } catch (error) {
+                console.error('Error loading translations:', error);
+                // Fallback - load data anyway
+                loadRegions();
+                loadFarms();
+            }
+        }
 
         async function loadRegions() {
             try {
@@ -130,8 +170,7 @@
                     regionCard.className = 'region-btn p-4 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg cursor-pointer transition-colors';
                     regionCard.dataset.regionId = region.id;
                     regionCard.innerHTML = `
-                        <h3 class="font-semibold">${region.name}</h3>
-                        <p class="text-sm opacity-75">${region.name_de}</p>
+                        <h3 class="font-semibold">${userLanguage === 'de' ? region.name_de : region.name}</h3>
                     `;
                     regionsList.appendChild(regionCard);
                 });
@@ -163,20 +202,29 @@
                 farmsList.innerHTML = '';
 
                 if (farms.length === 0) {
-                    farmsList.innerHTML = '<p class="text-silver col-span-full text-center py-8">No farms found for the selected criteria.</p>';
+                    farmsList.innerHTML = `<p class="text-silver col-span-full text-center py-8">${translations.no_farms_found || 'No farms found for the selected criteria.'}</p>`;
                     return;
                 }
 
                 farms.forEach(farm => {
+                    const description = userLanguage === 'de' ? (farm.description_de || farm.description_uk) : (farm.description_uk || farm.description_de);
+                    const imageUrl = farm.image_path ? `/static/uploads/${farm.image_path}` : null;
+
                     const farmCard = document.createElement('div');
                     farmCard.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
                     farmCard.innerHTML = `
+                        <div class="h-48 bg-gray-700 flex items-center justify-center">
+                            ${imageUrl ?
+                                `<img src="${imageUrl}" alt="${farm.name}" class="w-full h-full object-cover">` :
+                                `<div class="text-6xl gold-text font-bold">${farm.name.charAt(0).toUpperCase()}</div>`
+                            }
+                        </div>
                         <div class="p-6">
                             <h3 class="text-lg font-semibold mb-2 gold-text">${farm.name}</h3>
-                            <p class="text-sm text-silver mb-3">${farm.description_uk || farm.description_de || 'No description available'}</p>
+                            <p class="text-sm text-silver mb-3">${description || translations.no_description || 'No description available'}</p>
                             <div class="flex items-center justify-between text-sm">
-                                <span class="text-silver">${farm.location || 'Location not specified'}</span>
-                                <span class="gold-text font-medium">${farm.farm_type || 'Type not specified'}</span>
+                                <span class="text-silver">${farm.location || translations.location_not_specified || 'Location not specified'}</span>
+                                <span class="gold-text font-medium">${farm.farm_type || translations.type_not_specified || 'Type not specified'}</span>
                             </div>
                         </div>
                     `;

@@ -17,7 +17,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import the views and forms
 from admin.admin_views import LoginForm
-from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus, Region
+from core.models import User, Transaction, TransactionType, TransactionStatus, Farm, Category, Product, AvailabilityStatus, Region, Translation
 
 # Import shared db instance
 from extensions import db, admin
@@ -193,6 +193,20 @@ def webapp():
     return render_template('webapp/index.html')
 
 # WebApp API Endpoints
+@admin_api.route('/api/ui/translations')
+def api_ui_translations():
+    """Return all UI translations for the WebApp."""
+    lang = request.args.get('lang', 'uk')
+    with db.session() as session:
+        translations = session.execute(select(Translation)).scalars().all()
+        translations_dict = {}
+        for trans in translations:
+            if lang == 'de' and trans.value_de:
+                translations_dict[trans.key] = trans.value_de
+            else:
+                translations_dict[trans.key] = trans.value_uk or trans.key
+        return jsonify(translations_dict)
+
 @admin_api.route('/api/catalog/regions')
 def api_regions():
     """Return list of regions for the WebApp."""
@@ -291,6 +305,3 @@ def api_products():
                 'image_path': product.image_path
             })
         return jsonify(products_data)
-#    </content>
-# </xai:function_call name="update_todo_list">
-# <parameter name="todos">["Update core/models.py: Create junction table and modify Product/Category relationships", "Create admin/admin_views.py: Move all ModelView classes and LoginForm", "Create admin/routes.py: Move all routes to Blueprint", "Update admin/app.py: Simplify to main entry point only", "Run alembic migration for schema changes", "Create implementation report in docs/reports/"]
