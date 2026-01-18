@@ -211,7 +211,7 @@ def api_ui_translations():
 def api_regions():
     """Return list of regions for the WebApp."""
     with db.session() as session:
-        regions = session.execute(select(Region)).scalars().all()
+        regions = session.execute(select(Region).order_by(Region.id)).scalars().all()
         regions_data = []
         for region in regions:
             regions_data.append({
@@ -234,7 +234,11 @@ def api_farms():
         if region_id:
             query = query.where(Farm.region_id == region_id)
         if farm_type:
-            query = query.where(Farm.farm_type == farm_type)
+            # Case-insensitive comparison
+            query = query.where(db.func.lower(Farm.farm_type) == farm_type.lower())
+
+        # Sort by id ASC
+        query = query.order_by(Farm.id)
 
         farms = session.execute(query).scalars().all()
         farms_data = []
@@ -248,15 +252,27 @@ def api_farms():
                 'contact_info': farm.contact_info,
                 'image_path': farm.image_path,
                 'region_id': farm.region_id,
+                'region_name': farm.region.name if farm.region else None,
                 'farm_type': farm.farm_type
             })
         return jsonify(farms_data)
 
 @admin_api.route('/api/catalog/categories')
 def api_categories():
-    """Return list of categories for the WebApp."""
+    """Return list of categories for the WebApp, optionally filtered by farm_id."""
+    farm_id = request.args.get('farm_id', type=int)
+
     with db.session() as session:
-        categories = session.execute(select(Category)).scalars().all()
+        query = select(Category)
+
+        if farm_id:
+            # Filter categories that have products for this farm
+            query = query.join(Category.products).where(Product.farm_id == farm_id).distinct()
+
+        # Sort by id ASC
+        query = query.order_by(Category.id)
+
+        categories = session.execute(query).scalars().all()
         categories_data = []
         for category in categories:
             categories_data.append({
@@ -272,8 +288,9 @@ def api_categories():
 
 @admin_api.route('/api/catalog/products')
 def api_products():
-    """Return products for the WebApp, optionally filtered by category_id."""
+    """Return products for the WebApp, optionally filtered by category_id or farm_id."""
     category_id = request.args.get('category_id', type=int)
+    farm_id = request.args.get('farm_id', type=int)
 
     with db.session() as session:
         query = select(Product).where(Product.availability_status == AvailabilityStatus.IN_STOCK)
@@ -282,6 +299,12 @@ def api_products():
             # Join with categories for filtering
             query = query.join(Product.categories).where(Category.id == category_id)
 
+        if farm_id:
+            # Filter by farm
+            query = query.where(Product.farm_id == farm_id)
+
+        # Sort by id ASC
+        query = query.order_by(Product.id)
         products = session.execute(query).scalars().all()
         products_data = []
         for product in products:

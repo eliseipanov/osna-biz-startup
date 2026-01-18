@@ -141,6 +141,14 @@ async def seed():
             {"key": "change_lang_btn", "value_uk": "🌍 Змінити мову", "value_de": "🌍 Sprache ändern"},
             {"key": "profile_title", "value_uk": "Ваш профіль", "value_de": "Ihre Angaben"},
             {"key": "choose_section_hint", "value_uk": "Оберіть розділ нижче:", "value_de": "Wählen Sie einen Bereich aus:"},
+            {"key": "webapp_title", "value_uk": "FARM CONNECT", "value_de": "FARM CONNECT"},
+            {"key": "webapp_subtitle", "value_uk": "Преміум продукти ферми", "value_de": "Premium Farm-Produkte"},
+            {"key": "webapp_select_region", "value_uk": "Оберіть регіон", "value_de": "Region auswählen"},
+            {"key": "webapp_farm_types", "value_uk": "Типи ферм", "value_de": "Farm-Typen"},
+            {"key": "webapp_available_farms", "value_uk": "Доступні ферми", "value_de": "Verfügbare Farmen"},
+            {"key": "type_meat", "value_uk": "М'ясо", "value_de": "Fleisch"},
+            {"key": "type_vegetables", "value_uk": "Овочі", "value_de": "Gemüse"},
+            {"key": "type_fish", "value_uk": "Риба", "value_de": "Fisch"},
         ]
 
         for trans_data in translations_data:

@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FARM CONNECT</title>
+    <title id="page-title">FARM CONNECT</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
             font-family: 'Montserrat', sans-serif;
@@ -36,8 +37,8 @@
             <img src="/static/uploads/hero.jpg" alt="Farm Connect Hero" class="w-full h-full object-cover">
             <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
                 <div class="text-center">
-                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold gold-text mb-4" id="hero-title">FARM CONNECT</h1>
-                    <p class="text-lg md:text-xl silver-text" id="hero-subtitle">Premium Farm Products</p>
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold gold-text mb-4" id="ui-title">FARM CONNECT</h1>
+                    <p class="text-lg md:text-xl silver-text" id="ui-subtitle">Premium Farm Products</p>
                 </div>
             </div>
         </div>
@@ -45,37 +46,64 @@
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-6 py-8">
-        <!-- Regions Section -->
-        <section class="mb-8">
-            <h2 class="text-xl font-semibold mb-4 gold-text" id="select-region-title">Select Region</h2>
-            <div id="regions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Regions will be loaded here -->
-            </div>
-        </section>
+        <!-- Discovery View -->
+        <div id="discovery-view">
+            <!-- Regions Section -->
+            <section class="mb-8">
+                <h2 class="text-xl font-semibold mb-4 gold-text" id="ui-select-region">Select Region</h2>
+                <div id="regions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Regions will be loaded here -->
+                </div>
+            </section>
 
-        <!-- Farm Types Section -->
-        <section class="mb-8">
-            <h2 class="text-xl font-semibold mb-4 gold-text" id="farm-types-title">Farm Types</h2>
-            <div id="farm-types-list" class="flex flex-wrap gap-3">
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="meat" id="meat-type">
-                    🥩 Meat
-                </button>
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="vegetables" id="vegetables-type">
-                    🥕 Vegetables
-                </button>
-                <button class="farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors" data-type="fish" id="fish-type">
-                    🐟 Fish
-                </button>
-            </div>
-        </section>
+            <!-- Farm Types Section -->
+            <section class="mb-8">
+                <h2 class="text-xl font-semibold mb-4 gold-text" id="ui-farm-types">Farm Types</h2>
+                <div id="farm-types-list" class="flex flex-wrap gap-3">
+                    <!-- Farm type buttons will be generated dynamically -->
+                </div>
+            </section>
 
-        <!-- Farms Section -->
-        <section>
-            <h2 class="text-xl font-semibold mb-4 gold-text" id="available-farms-title">Available Farms</h2>
-            <div id="farms-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Farms will be loaded here -->
+            <!-- Farms Section -->
+            <section id="farms-section">
+                <h2 class="text-xl font-semibold mb-4 gold-text" id="ui-available-farms">Available Farms</h2>
+                <div id="farms-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Farms will be loaded here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Shop View -->
+        <div id="shop-view" class="hidden">
+            <!-- Farm Hero Image -->
+            <div id="farm-hero" class="w-full h-48 md:h-64 mb-6 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+                <!-- Farm image will be displayed here -->
             </div>
-        </section>
+
+            <!-- Back Button and Farm Info -->
+            <div class="flex items-center mb-6">
+                <button id="back-to-farms" class="mr-4 px-4 py-2 bg-transparent border-2 border-gold text-gold hover:bg-gold hover:text-black font-medium rounded-lg transition-colors">
+                    ⬅️ ${translations.webapp_back_to_farms || 'Back to Farms'}
+                </button>
+                <div class="text-center flex-1">
+                    <h2 class="text-xl font-semibold gold-text" id="farm-name-title">Farm Products</h2>
+                    <p class="text-sm text-silver" id="farm-description">Farm description</p>
+                </div>
+            </div>
+
+            <!-- Category Carousel -->
+            <div class="mb-6">
+                <h3 class="text-lg font-medium mb-3 gold-text">${translations.webapp_categories || 'Categories'}</h3>
+                <div id="categories-carousel" class="flex space-x-4 overflow-x-auto pb-2">
+                    <!-- Categories will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Products Feed -->
+            <div id="products-list" class="space-y-4">
+                <!-- Products will be loaded here -->
+            </div>
+        </div>
     </main>
 
     <!-- JavaScript -->
@@ -84,6 +112,9 @@
         let selectedFarmType = null;
         let translations = {};
         let userLanguage = 'uk';
+        let currentView = 'farms'; // 'farms' or 'products'
+        let selectedFarm = null;
+        let selectedCategory = null; // null means 'All'
 
         // Get language from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -91,11 +122,17 @@
 
         // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Telegram WebApp
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.ready();
+                window.Telegram.WebApp.expand();
+            }
             loadTranslations();
         });
 
-        // Region selection
+        // Event listeners
         document.addEventListener('click', function(e) {
+            // Region selection
             if (e.target.classList.contains('region-btn') || e.target.closest('.region-btn')) {
                 const btn = e.target.closest('.region-btn');
                 // Remove active class from all region buttons
@@ -112,6 +149,7 @@
                 loadFarms();
             }
 
+            // Farm type selection
             if (e.target.classList.contains('farm-type-btn') || e.target.closest('.farm-type-btn')) {
                 const btn = e.target.closest('.farm-type-btn');
                 // Remove active class from all farm type buttons
@@ -127,24 +165,90 @@
                 selectedFarmType = btn.dataset.type;
                 loadFarms();
             }
+
+            // Enter shop button
+            if (e.target.classList.contains('enter-shop-btn') || e.target.closest('.enter-shop-btn')) {
+                const btn = e.target.closest('.enter-shop-btn');
+                const farmId = btn.dataset.farmId;
+                const farmName = btn.dataset.farmName;
+                const farmDescription = btn.dataset.farmDescription;
+                const farmImage = btn.dataset.farmImage;
+                showProducts(farmId, farmName, farmDescription, farmImage);
+            }
+
+            // Back to farms button
+            if (e.target.id === 'back-to-farms') {
+                showFarms();
+            }
+
+            // Category selection
+            if (e.target.classList.contains('category-btn') || e.target.closest('.category-btn')) {
+                const btn = e.target.closest('.category-btn');
+                const categoryId = btn.dataset.categoryId;
+
+                // Remove active class from all category buttons
+                document.querySelectorAll('.category-btn').forEach(b => {
+                    b.classList.remove('ring-2', 'ring-gold');
+                });
+
+                // Add active class to clicked button
+                btn.classList.add('ring-2', 'ring-gold');
+
+                selectedCategory = categoryId === 'all' ? null : categoryId;
+                loadProducts(selectedFarm.id);
+            }
+
+            // Quantity controls
+            if (e.target.classList.contains('qty-btn')) {
+                const btn = e.target;
+                const productId = btn.dataset.productId;
+                const action = btn.dataset.action;
+                updateQuantity(productId, action);
+            }
         });
+
+        function generateFarmTypeButtons() {
+            const farmTypes = [
+                { type: 'meat', emoji: '🥩', defaultText: 'Meat' },
+                { type: 'vegetables', emoji: '🥕', defaultText: 'Vegetables' },
+                { type: 'fish', emoji: '🐟', defaultText: 'Fish' },
+                { type: 'poultry', emoji: '🍗', defaultText: 'Poultry' }
+            ];
+
+            const farmTypesList = document.getElementById('farm-types-list');
+            farmTypesList.innerHTML = '';
+
+            farmTypes.forEach(farmType => {
+                const button = document.createElement('button');
+                button.className = 'farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors';
+                button.dataset.type = farmType.type;
+                button.id = `btn-${farmType.type}`;
+                // Use exact translation keys from database
+                const translationKey = `type_${farmType.type}`;
+                button.innerHTML = `${farmType.emoji} ${translations[translationKey] || farmType.defaultText}`;
+                farmTypesList.appendChild(button);
+            });
+        }
 
         async function loadTranslations() {
             try {
                 const response = await fetch(`/api/ui/translations?lang=${userLanguage}`);
                 translations = await response.json();
 
-                // Update UI text
-                document.getElementById('hero-title').textContent = translations.farm_connect_title || 'FARM CONNECT';
-                document.getElementById('hero-subtitle').textContent = translations.premium_farm_products || 'Premium Farm Products';
-                document.getElementById('select-region-title').textContent = translations.select_region || 'Select Region';
-                document.getElementById('farm-types-title').textContent = translations.farm_types || 'Farm Types';
-                document.getElementById('available-farms-title').textContent = translations.available_farms || 'Available Farms';
+                // Update page title
+                document.getElementById('page-title').textContent = translations.webapp_title || 'FARM CONNECT';
 
-                // Update farm type buttons
-                document.getElementById('meat-type').textContent = `🥩 ${translations.meat_type || 'Meat'}`;
-                document.getElementById('vegetables-type').textContent = `🥕 ${translations.vegetables_type || 'Vegetables'}`;
-                document.getElementById('fish-type').textContent = `🐟 ${translations.fish_type || 'Fish'}`;
+                // Update hero section
+                document.getElementById('ui-title').textContent = translations.webapp_title || 'FARM CONNECT';
+                document.getElementById('ui-subtitle').textContent = translations.webapp_subtitle || 'Premium Farm Products';
+
+                // Update section headers
+                document.getElementById('ui-select-region').textContent = translations.webapp_select_region || 'Select Region';
+                document.getElementById('ui-farm-types').textContent = translations.webapp_farm_types || 'Farm Types';
+                document.getElementById('ui-available-farms').textContent = translations.webapp_available_farms || 'Available Farms';
+
+                // Generate farm type buttons dynamically
+                generateFarmTypeButtons();
 
                 // Now load other data
                 loadRegions();
@@ -222,10 +326,13 @@
                         <div class="p-6">
                             <h3 class="text-lg font-semibold mb-2 gold-text">${farm.name}</h3>
                             <p class="text-sm text-silver mb-3">${description || translations.no_description || 'No description available'}</p>
-                            <div class="flex items-center justify-between text-sm">
-                                <span class="text-silver">${farm.location || translations.location_not_specified || 'Location not specified'}</span>
-                                <span class="gold-text font-medium">${farm.farm_type || translations.type_not_specified || 'Type not specified'}</span>
+                            <div class="flex items-center justify-between text-sm mb-4">
+                                <span class="text-silver">${farm.region_name || farm.location || translations.location_not_specified || 'Location not specified'}</span>
+                                <span class="gold-text font-medium">${translations[`type_${farm.farm_type}`] || farm.farm_type || translations.type_not_specified || 'Type not specified'}</span>
                             </div>
+                            <button class="enter-shop-btn w-full px-4 py-2 bg-transparent border-2 border-gold text-gold hover:bg-gold hover:text-black font-medium rounded-lg transition-colors" data-farm-id="${farm.id}" data-farm-name="${farm.name}" data-farm-description="${description}" data-farm-image="${imageUrl || ''}">
+                                🛒 ${translations.webapp_enter_shop || 'Enter Shop'}
+                            </button>
                         </div>
                     `;
                     farmsList.appendChild(farmCard);
@@ -233,6 +340,167 @@
             } catch (error) {
                 console.error('Error loading farms:', error);
             }
+        }
+
+        function showProducts(farmId, farmName, farmDescription, farmImage) {
+            currentView = 'products';
+            selectedFarm = { id: farmId, name: farmName, description: farmDescription, image: farmImage };
+            selectedCategory = null; // Reset category filter
+
+            // Hide discovery view, show shop view
+            document.getElementById('discovery-view').classList.add('hidden');
+            document.getElementById('shop-view').classList.remove('hidden');
+
+            // Update farm hero image
+            const farmHero = document.getElementById('farm-hero');
+            if (farmImage) {
+                farmHero.innerHTML = `<img src="${farmImage}" alt="${farmName}" class="w-full h-full object-cover">`;
+            } else {
+                farmHero.innerHTML = `<div class="text-4xl gold-text font-bold">${farmName.charAt(0).toUpperCase()}</div>`;
+            }
+
+            // Update title and description
+            document.getElementById('farm-name-title').textContent = farmName;
+            document.getElementById('farm-description').textContent = farmDescription || '';
+
+            // Load categories and products
+            loadCategories(farmId);
+            loadProducts(farmId);
+        }
+
+        function showFarms() {
+            currentView = 'farms';
+            selectedFarm = null;
+
+            // Hide shop view, show discovery view
+            document.getElementById('shop-view').classList.add('hidden');
+            document.getElementById('discovery-view').classList.remove('hidden');
+        }
+
+        async function loadProducts(farmId) {
+            try {
+                let url = `/api/catalog/products?farm_id=${farmId}`;
+                if (selectedCategory) {
+                    url += `&category_id=${selectedCategory}`;
+                }
+
+                const response = await fetch(url);
+                const products = await response.json();
+
+                const productsList = document.getElementById('products-list');
+                productsList.innerHTML = '';
+
+                if (products.length === 0) {
+                    productsList.innerHTML = `<p class="text-silver text-center py-8">${translations.no_products_found || 'No products found for this farm.'}</p>`;
+                    return;
+                }
+
+                products.forEach(product => {
+                    const name = userLanguage === 'de' ? (product.name_de || product.name) : product.name;
+                    const description = userLanguage === 'de' ? (product.description_de || product.description) : product.description;
+                    const imageUrl = product.image_path ? `/static/uploads/${product.image_path}` : null;
+
+                    const productCard = document.createElement('div');
+                    productCard.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
+                    productCard.innerHTML = `
+                        <div class="w-full aspect-square bg-gray-700 flex items-center justify-center">
+                            ${imageUrl ?
+                                `<img src="${imageUrl}" alt="${name}" class="w-full h-full object-cover">` :
+                                `<div class="text-6xl gold-text font-bold">${name.charAt(0).toUpperCase()}</div>`
+                            }
+                        </div>
+                        <div class="p-4">
+                            <h3 class="text-lg font-semibold mb-1 gold-text">${name}</h3>
+                            <p class="text-sm text-silver mb-2">${description || ''}</p>
+                            <div class="flex items-center justify-between">
+                                <span class="gold-text font-bold">${product.price ? `${product.price.toFixed(2)} €` : ''}</span>
+                                <div class="flex items-center space-x-2">
+                                    <button class="qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${product.id}" data-action="decrease">-</button>
+                                    <span class="qty-display px-3 py-1 bg-gray-700 text-silver rounded" data-product-id="${product.id}">0</span>
+                                    <button class="qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${product.id}" data-action="increase">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    productsList.appendChild(productCard);
+                });
+            } catch (error) {
+                console.error('Error loading products:', error);
+            }
+        }
+
+        async function loadCategories(farmId) {
+            try {
+                const response = await fetch(`/api/catalog/categories?farm_id=${farmId}`);
+                const categories = await response.json();
+
+                const categoriesCarousel = document.getElementById('categories-carousel');
+                categoriesCarousel.innerHTML = '';
+
+                // Add "All" category first
+                const allCategory = document.createElement('div');
+                allCategory.className = 'category-btn flex-shrink-0 w-48 h-28 bg-gray-800 rounded-lg overflow-hidden cursor-pointer ring-2 ring-gold relative';
+                allCategory.dataset.categoryId = 'all';
+                allCategory.innerHTML = `
+                    <div class="w-full h-full bg-gradient-to-t from-black to-transparent flex items-end justify-center pb-2">
+                        <div class="text-center">
+                            <div class="text-lg">📦</div>
+                            <div class="text-sm gold-text font-medium">${translations.webapp_all_items || 'All'}</div>
+                        </div>
+                    </div>
+                `;
+                categoriesCarousel.appendChild(allCategory);
+
+                // Add actual categories
+                categories.forEach(category => {
+                    const categoryCard = document.createElement('div');
+                    categoryCard.className = 'category-btn flex-shrink-0 w-48 h-28 bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-gold transition-all relative';
+                    categoryCard.dataset.categoryId = category.id;
+
+                    const displayName = userLanguage === 'de' ? category.name_de : category.name;
+                    const imageUrl = category.image_path ? `/static/uploads/${category.image_path}` : null;
+
+                    categoryCard.innerHTML = `
+                        <div class="w-full h-full">
+                            ${imageUrl ?
+                                `<img src="${imageUrl}" alt="${displayName}" class="w-full h-full object-cover">` :
+                                `<div class="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center"><div class="text-4xl">${getCategoryEmoji(displayName)}</div></div>`
+                            }
+                            <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex items-end justify-center pb-2">
+                                <div class="text-center">
+                                    <div class="text-sm gold-text font-medium">${displayName}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    categoriesCarousel.appendChild(categoryCard);
+                });
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
+        function getCategoryEmoji(categoryName) {
+            const emojiMap = {
+                'Schwein': '🐷',
+                'Rind': '🐮',
+                'Wurst': '🌭',
+                'Mix': '🥩'
+            };
+            return emojiMap[categoryName] || '📦';
+        }
+
+        function updateQuantity(productId, action) {
+            const qtyDisplay = document.querySelector(`.qty-display[data-product-id="${productId}"]`);
+            let currentQty = parseInt(qtyDisplay.textContent);
+
+            if (action === 'increase') {
+                currentQty++;
+            } else if (action === 'decrease' && currentQty > 0) {
+                currentQty--;
+            }
+
+            qtyDisplay.textContent = currentQty;
         }
     </script>
 </body>

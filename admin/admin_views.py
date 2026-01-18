@@ -88,6 +88,7 @@ class RegionView(SecureModelView):
 
 # Кастомна в'юха для ферм
 class FarmView(SecureModelView):
+    column_list = ('id', 'name', 'region', 'farm_type', 'location', 'contact_info', 'is_active', 'image_path')
     column_labels = {
         'id': 'ID',
         'name': 'Назва',
