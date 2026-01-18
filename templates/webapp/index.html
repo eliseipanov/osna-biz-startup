@@ -31,23 +31,22 @@
     </style>
 </head>
 <body class="dark-bg min-h-screen">
-    <!-- Hero Header -->
-    <header class="relative">
-        <div class="w-full h-64 md:h-80 lg:h-96 overflow-hidden">
-            <img src="/static/uploads/hero.jpg" alt="Farm Connect Hero" class="w-full h-full object-cover">
-            <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-                <div class="text-center">
-                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold gold-text mb-4" id="ui-title">FARM CONNECT</h1>
-                    <p class="text-lg md:text-xl silver-text" id="ui-subtitle">Premium Farm Products</p>
-                </div>
-            </div>
-        </div>
-    </header>
-
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-6 py-8">
         <!-- Discovery View -->
         <div id="discovery-view">
+            <!-- Hero Header -->
+            <header class="relative mb-8">
+                <div class="w-full h-64 md:h-80 lg:h-96 overflow-hidden">
+                    <img src="/static/uploads/hero.jpg" alt="Farm Connect Hero" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                        <div class="text-center">
+                            <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold gold-text mb-4" id="ui-title">FARM CONNECT</h1>
+                            <p class="text-lg md:text-xl silver-text" id="ui-subtitle">Premium Farm Products</p>
+                        </div>
+                    </div>
+                </div>
+            </header>
             <!-- Regions Section -->
             <section class="mb-8">
                 <h2 class="text-xl font-semibold mb-4 gold-text" id="ui-select-region">Select Region</h2>
@@ -83,7 +82,7 @@
             <!-- Back Button and Farm Info -->
             <div class="flex items-center mb-6">
                 <button id="back-to-farms" class="mr-4 px-4 py-2 bg-transparent border-2 border-gold text-gold hover:bg-gold hover:text-black font-medium rounded-lg transition-colors">
-                    ⬅️ ${translations.webapp_back_to_farms || 'Back to Farms'}
+                    ⬅️ <span id="ui-btn-back"></span>
                 </button>
                 <div class="text-center flex-1">
                     <h2 class="text-xl font-semibold gold-text" id="farm-name-title">Farm Products</h2>
@@ -93,7 +92,7 @@
 
             <!-- Category Carousel -->
             <div class="mb-6">
-                <h3 class="text-lg font-medium mb-3 gold-text">${translations.webapp_categories || 'Categories'}</h3>
+                <h3 class="text-lg font-medium mb-3 gold-text"><span id="ui-label-categories"></span></h3>
                 <div id="categories-carousel" class="flex space-x-4 overflow-x-auto pb-2">
                     <!-- Categories will be loaded here -->
                 </div>
@@ -209,10 +208,10 @@
 
         function generateFarmTypeButtons() {
             const farmTypes = [
-                { type: 'meat', emoji: '🥩', defaultText: 'Meat' },
-                { type: 'vegetables', emoji: '🥕', defaultText: 'Vegetables' },
-                { type: 'fish', emoji: '🐟', defaultText: 'Fish' },
-                { type: 'poultry', emoji: '🍗', defaultText: 'Poultry' }
+                { type: 'meat', defaultText: 'Meat' },
+                { type: 'vegetables', defaultText: 'Vegetables' },
+                { type: 'fish', defaultText: 'Fish' },
+                { type: 'poultry', defaultText: 'Poultry' }
             ];
 
             const farmTypesList = document.getElementById('farm-types-list');
@@ -223,9 +222,11 @@
                 button.className = 'farm-type-btn px-4 py-2 bg-gray-800 hover:gold-bg hover:text-black text-silver rounded-lg transition-colors';
                 button.dataset.type = farmType.type;
                 button.id = `btn-${farmType.type}`;
-                // Use exact translation keys from database
+
+                // Labels come 100% from database (no hardcoded emojis)
                 const translationKey = `type_${farmType.type}`;
-                button.innerHTML = `${farmType.emoji} ${translations[translationKey] || farmType.defaultText}`;
+                button.innerHTML = translations[translationKey] || farmType.defaultText;
+
                 farmTypesList.appendChild(button);
             });
         }
@@ -249,6 +250,10 @@
 
                 // Generate farm type buttons dynamically
                 generateFarmTypeButtons();
+
+                // Populate UI text elements
+                document.getElementById('ui-btn-back').innerText = translations['webapp_back_to_farms'] || 'Back to Farms';
+                document.getElementById('ui-label-categories').innerText = translations['webapp_categories'] || 'Categories';
 
                 // Now load other data
                 loadRegions();
