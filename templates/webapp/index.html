@@ -141,20 +141,19 @@
     </main>
 
     <!-- Sticky Cart Footer -->
-    <div id="sticky-cart" class="fixed bottom-0 left-0 right-0 bg-black bg-opacity-95 text-gold p-4 hidden z-50">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <span id="cart-count" class="text-sm">0 items</span>
+    <div id="sticky-cart" class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t-4 border-gold text-gold p-4 hidden z-50 cursor-pointer" onclick="showCartView()">
+        <div class="max-w-7xl mx-auto flex items-center justify-center">
+            <div class="flex items-center space-x-6 text-xl">
+                <span>🛒</span>
+                <span id="cart-count" class="font-medium">0 items</span>
                 <span id="cart-total" class="font-bold">0.00 €</span>
+                <span>View Cart ➔</span>
             </div>
-            <button id="view-cart-btn" class="px-6 py-2 bg-gold text-black font-medium rounded-lg hover:bg-opacity-90 transition-colors">
-                View Cart
-            </button>
         </div>
     </div>
 
     <!-- Scroll to Top Button -->
-    <button id="scroll-to-top" class="fixed bottom-20 right-4 w-12 h-12 bg-gold text-black rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-40 hidden">
+    <button id="scroll-to-top" class="fixed bottom-24 right-4 w-16 h-16 bg-gold text-black rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-40 hidden text-2xl">
         ⬆️
     </button>
 
@@ -168,7 +167,7 @@
         let selectedFarm = null;
         let selectedCategory = null; // null means 'All'
         let categories = [];
-        let cartState = {}; // { productId: quantity }
+        let cartState = {}; // { productId: { qty, price, name } }
         let productsData = []; // Store product data for cart calculations
 
         // Get language from URL parameter
@@ -282,17 +281,17 @@
                 const productId = parseInt(btn.dataset.productId);
                 const action = btn.dataset.action;
 
+                // Find product data
+                const product = productsData.find(p => p.id == productId);
+                if (!product) return;
+
                 if (action === 'increase') {
-                    addToCart(productId, 1);
+                    addToCart(productId, 1, product);
                 } else if (action === 'decrease') {
-                    addToCart(productId, -1);
+                    addToCart(productId, -1, product);
                 }
             }
 
-            // View cart button
-            if (e.target.id === 'view-cart-btn' || e.target.closest('#view-cart-btn')) {
-                showCartView();
-            }
 
             // Scroll to top button
             if (e.target.id === 'scroll-to-top') {
@@ -527,25 +526,21 @@
             cartSummary.classList.remove('hidden');
             emptyCart.classList.add('hidden');
 
-            cartEntries.forEach(([productId, qty]) => {
-                const product = productsData.find(p => p.id == productId);
-                if (!product) return;
-
-                const name = userLanguage === 'de' ? (product.name_de || product.name) : product.name;
-                const itemTotal = product.price * qty;
+            cartEntries.forEach(([productId, item]) => {
+                const itemTotal = item.price * item.qty;
 
                 const cartItem = document.createElement('div');
                 cartItem.className = 'bg-gray-800 rounded-lg p-4';
                 cartItem.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex-1">
-                            <h3 class="font-semibold gold-text">${name}</h3>
-                            <p class="text-sm text-silver">${product.price.toFixed(2)} € each</p>
+                            <h3 class="font-semibold gold-text">${item.name}</h3>
+                            <p class="text-sm text-silver">${item.price.toFixed(2)} € each</p>
                         </div>
                         <div class="flex items-center space-x-3">
                             <div class="flex items-center space-x-2">
                                 <button class="cart-qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${productId}" data-action="decrease">-</button>
-                                <span class="px-3 py-1 bg-gray-700 text-silver rounded">${qty}</span>
+                                <span class="px-3 py-1 bg-gray-700 text-silver rounded">${item.qty}</span>
                                 <button class="cart-qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${productId}" data-action="increase">+</button>
                             </div>
                             <span class="font-bold gold-text">${itemTotal.toFixed(2)} €</span>
@@ -562,14 +557,11 @@
 
         function handleCheckout() {
             const orderData = {
-                items: Object.entries(cartState).map(([productId, qty]) => {
-                    const product = productsData.find(p => p.id == productId);
-                    return {
-                        id: parseInt(productId),
-                        qty: qty,
-                        price: product ? product.price : 0
-                    };
-                }),
+                items: Object.entries(cartState).map(([productId, item]) => ({
+                    id: parseInt(productId),
+                    qty: item.qty,
+                    price: item.price
+                })),
                 total: getCartTotal()
             };
 
@@ -687,7 +679,22 @@
         // Cart functions
         function loadCartState() {
             const saved = localStorage.getItem('webapp_cart');
-            cartState = saved ? JSON.parse(saved) : {};
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Migration: convert old format {id: qty} to new format {id: {qty, price, name}}
+                cartState = {};
+                Object.entries(parsed).forEach(([productId, value]) => {
+                    if (typeof value === 'number') {
+                        // Old format - clear it to prevent errors
+                        return;
+                    } else if (typeof value === 'object' && value.qty) {
+                        // New format
+                        cartState[productId] = value;
+                    }
+                });
+            } else {
+                cartState = {};
+            }
             updateStickyFooter();
         }
 
@@ -696,9 +703,23 @@
             updateStickyFooter();
         }
 
-        function addToCart(productId, quantity) {
-            cartState[productId] = (cartState[productId] || 0) + quantity;
-            if (cartState[productId] <= 0) {
+        function addToCart(productId, quantity, product = null) {
+            if (!cartState[productId]) {
+                if (!product) {
+                    // Try to find product in current productsData
+                    product = productsData.find(p => p.id == productId);
+                }
+                if (!product) return; // Cannot add without product data
+
+                cartState[productId] = {
+                    qty: 0,
+                    price: product.price,
+                    name: userLanguage === 'de' ? (product.name_de || product.name) : product.name
+                };
+            }
+
+            cartState[productId].qty += quantity;
+            if (cartState[productId].qty <= 0) {
                 delete cartState[productId];
             }
             saveCartState();
@@ -712,20 +733,17 @@
         }
 
         function getCartCount() {
-            return Object.values(cartState).reduce((sum, qty) => sum + qty, 0);
+            return Object.values(cartState).reduce((sum, item) => sum + item.qty, 0);
         }
 
         function getCartTotal() {
-            return Object.entries(cartState).reduce((total, [productId, qty]) => {
-                const product = productsData.find(p => p.id == productId);
-                return total + (product ? product.price * qty : 0);
-            }, 0);
+            return Object.values(cartState).reduce((total, item) => total + (item.price * item.qty), 0);
         }
 
         function updateProductQuantityDisplay(productId) {
             const qtyDisplay = document.querySelector(`.qty-display[data-product-id="${productId}"]`);
             if (qtyDisplay) {
-                qtyDisplay.textContent = cartState[productId] || 0;
+                qtyDisplay.textContent = cartState[productId]?.qty || 0;
             }
         }
 
