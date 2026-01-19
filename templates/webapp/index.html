@@ -92,24 +92,11 @@
                 <p class="text-sm text-silver" id="farm-description">Farm description</p>
             </div>
 
-            <!-- Category Hero Slider -->
+            <!-- Category Grid -->
             <div class="mb-6">
                 <h3 class="text-lg font-medium mb-3 gold-text"><span id="ui-label-categories"></span></h3>
-                <div id="category-slider" class="relative">
-                    <!-- Left Arrow -->
-                    <button id="category-prev" class="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-gold w-12 h-12 rounded-full flex items-center justify-center transition-all">
-                        ‹
-                    </button>
-
-                    <!-- Active Category Card -->
-                    <div id="category-display" class="mx-16 cursor-pointer">
-                        <!-- Category content will be rendered here -->
-                    </div>
-
-                    <!-- Right Arrow -->
-                    <button id="category-next" class="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 hover:bg-opacity-75 text-gold w-12 h-12 rounded-full flex items-center justify-center transition-all">
-                        ›
-                    </button>
+                <div id="categories-grid" class="grid grid-cols-2 gap-4">
+                    <!-- Category tiles will be rendered here -->
                 </div>
             </div>
 
@@ -139,7 +126,6 @@
         let selectedFarm = null;
         let selectedCategory = null; // null means 'All'
         let categories = [];
-        let currentCategoryIndex = 0;
 
         // Get language from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -213,20 +199,20 @@
                 showFarms();
             }
 
-            // Category slider navigation
-            if (e.target.id === 'category-prev') {
-                currentCategoryIndex = (currentCategoryIndex - 1 + categories.length) % categories.length;
-                renderCategorySlider();
-            }
-            if (e.target.id === 'category-next') {
-                currentCategoryIndex = (currentCategoryIndex + 1) % categories.length;
-                renderCategorySlider();
-            }
+            // Category selection (clicking a grid tile)
+            if (e.target.classList.contains('category-tile') || e.target.closest('.category-tile')) {
+                const tile = e.target.closest('.category-tile');
+                const categoryId = tile.dataset.categoryId;
 
-            // Category selection (clicking the main card)
-            if (e.target.id === 'category-display' || e.target.closest('#category-display')) {
-                const categoryId = categories[currentCategoryIndex].id;
-                selectedCategory = categoryId === 'all' ? null : categoryId;
+                // Remove active class from all tiles
+                document.querySelectorAll('.category-tile').forEach(t => {
+                    t.classList.remove('ring-2', 'ring-gold');
+                });
+
+                // Add active class to clicked tile
+                tile.classList.add('ring-2', 'ring-gold');
+
+                selectedCategory = categoryId;
                 loadProducts(selectedFarm.id);
             }
 
@@ -480,55 +466,40 @@
         async function loadCategories(farmId) {
             try {
                 const response = await fetch(`/api/catalog/categories?farm_id=${farmId}`);
-                const apiCategories = await response.json();
+                categories = await response.json();
 
-                // Build categories array with "All" first
-                categories = [
-                    {
-                        id: 'all',
-                        name: translations.webapp_all_items || 'All',
-                        name_de: translations.webapp_all_items || 'All',
-                        image_path: null,
-                        description: translations.webapp_all_description || 'All products from this farm',
-                        description_de: translations.webapp_all_description || 'Alle Produkte von diesem Hof'
-                    },
-                    ...apiCategories
-                ];
-
-                currentCategoryIndex = 0;
-                renderCategorySlider();
+                renderCategoriesGrid();
             } catch (error) {
                 console.error('Error loading categories:', error);
             }
         }
 
-        function renderCategorySlider() {
-            if (categories.length === 0) return;
+        function renderCategoriesGrid() {
+            const grid = document.getElementById('categories-grid');
+            grid.innerHTML = '';
 
-            const category = categories[currentCategoryIndex];
-            const displayName = userLanguage === 'de' ? category.name_de : category.name;
-            const displayDescription = userLanguage === 'de' ? category.description_de : category.description;
-            const imageUrl = category.image_path ? `/static/uploads/${category.image_path}` : null;
+            categories.forEach(category => {
+                const displayName = userLanguage === 'de' ? category.name_de : category.name;
+                const imageUrl = category.image_path ? `/static/uploads/${category.image_path}` : null;
 
-            const categoryDisplay = document.getElementById('category-display');
-            categoryDisplay.innerHTML = `
-                <div class="w-full max-w-2xl mx-auto">
-                    <div class="aspect-video bg-gray-800 rounded-lg overflow-hidden shadow-lg mb-4">
-                        ${imageUrl ?
-                            `<img src="${imageUrl}" alt="${displayName}" class="w-full h-full object-cover">` :
-                            `<div class="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-                                <div class="text-6xl">${category.id === 'all' ? '📦' : getCategoryEmoji(displayName)}</div>
-                            </div>`
-                        }
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent flex items-end justify-center pb-4">
-                            <div class="text-center">
-                                <h3 class="text-2xl font-bold gold-text mb-1">${displayName}</h3>
-                            </div>
-                        </div>
+                const tile = document.createElement('div');
+                tile.className = 'category-tile aspect-square bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer hover:ring-2 hover:ring-gold transition-all relative';
+                tile.dataset.categoryId = category.id;
+
+                tile.innerHTML = `
+                    ${imageUrl ?
+                        `<img src="${imageUrl}" alt="${displayName}" class="w-full h-full object-cover">` :
+                        `<div class="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+                            <div class="text-4xl">${getCategoryEmoji(displayName)}</div>
+                        </div>`
+                    }
+                    <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <h4 class="text-xl font-bold gold-text text-center px-2">${displayName}</h4>
                     </div>
-                    <p class="text-center text-silver text-sm">${displayDescription || ''}</p>
-                </div>
-            `;
+                `;
+
+                grid.appendChild(tile);
+            });
         }
 
         function getCategoryEmoji(categoryName) {
