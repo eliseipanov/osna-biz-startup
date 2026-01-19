@@ -32,7 +32,7 @@
 </head>
 <body class="dark-bg min-h-screen">
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-6 py-8">
+    <main class="max-w-7xl mx-auto px-6 py-8 pb-32">
         <!-- Discovery View -->
         <div id="discovery-view">
             <!-- Hero Header -->
@@ -123,31 +123,31 @@
             <!-- Cart Total & Checkout -->
             <div id="cart-summary" class="bg-gray-800 rounded-lg p-6 hidden">
                 <div class="flex justify-between items-center mb-4">
-                    <span class="text-lg font-semibold gold-text">Total:</span>
+                    <span class="text-lg font-semibold gold-text"><span id="total-label"></span></span>
                     <span id="cart-grand-total" class="text-xl font-bold gold-text">0.00 €</span>
                 </div>
-                <button id="checkout-btn" class="w-full px-6 py-3 bg-gold text-black font-bold rounded-lg hover:bg-opacity-90 transition-colors">
-                    Checkout
+                <button id="checkout-btn" class="w-full bg-yellow-500 text-black font-bold py-4 rounded-lg text-lg uppercase tracking-wider hover:bg-yellow-600 shadow-lg transition-colors">
+                    <span id="checkout-btn-text"></span>
                 </button>
             </div>
 
             <!-- Empty Cart Message -->
             <div id="empty-cart" class="text-center py-16">
                 <div class="text-6xl mb-4">🛒</div>
-                <h2 class="text-2xl font-bold gold-text mb-2">Your Cart is Empty</h2>
-                <p class="text-silver">Add some delicious products to get started!</p>
+                <h2 class="text-2xl font-bold gold-text mb-2"><span id="empty-title"></span></h2>
+                <p class="text-silver"><span id="empty-desc"></span></p>
             </div>
         </div>
     </main>
 
     <!-- Sticky Cart Footer -->
-    <div id="sticky-cart" class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t-4 border-gold text-gold p-4 hidden z-50 cursor-pointer" onclick="showCartView()">
+    <div id="sticky-cart" class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t-4 border-yellow-500 text-yellow-500 p-4 hidden z-50 cursor-pointer" onclick="showCartView()">
         <div class="max-w-7xl mx-auto flex items-center justify-center">
             <div class="flex items-center space-x-6 text-xl">
                 <span>🛒</span>
                 <span id="cart-count" class="font-medium">0 items</span>
                 <span id="cart-total" class="font-bold">0.00 €</span>
-                <span>View Cart ➔</span>
+                <span id="view-cart-label">View Cart ➔</span>
             </div>
         </div>
     </div>
@@ -314,7 +314,7 @@
             }
 
             // Checkout button
-            if (e.target.id === 'checkout-btn') {
+            if (e.target.id === 'checkout-btn' || e.target.closest('#checkout-btn')) {
                 handleCheckout();
             }
         });
@@ -367,6 +367,10 @@
                 // Populate UI text elements
                 document.getElementById('ui-btn-back').innerText = translations['webapp_back_to_farms'] || 'Back to Farms';
                 document.getElementById('ui-label-categories').innerText = translations['webapp_categories'] || 'Categories';
+                document.getElementById('total-label').innerText = translations['webapp_total_label'] || 'Total:';
+                document.getElementById('checkout-btn-text').innerText = translations['webapp_checkout_btn'] || 'Checkout';
+                document.getElementById('empty-title').innerText = translations['webapp_empty_title'] || 'Your Cart is Empty';
+                document.getElementById('empty-desc').innerText = translations['webapp_empty_desc'] || 'Add some delicious products to get started!';
 
                 // Now load other data
                 loadRegions();
@@ -753,8 +757,9 @@
             const total = getCartTotal();
 
             if (count > 0) {
-                document.getElementById('cart-count').textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+                document.getElementById('cart-count').textContent = `${translations.webapp_items_label || 'Items:'} ${count}`;
                 document.getElementById('cart-total').textContent = `${total.toFixed(2)} €`;
+                document.getElementById('view-cart-label').textContent = `${translations.webapp_view_cart || 'View Cart'} ➔`;
                 footer.classList.remove('hidden');
             } else {
                 footer.classList.add('hidden');
