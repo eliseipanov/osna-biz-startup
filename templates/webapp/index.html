@@ -108,13 +108,55 @@
 
         <!-- Cart View -->
         <div id="cart-view" class="hidden">
-            <div class="text-center py-16">
+            <!-- Cart Header -->
+            <div class="mb-6">
+                <button id="back-to-farms" class="px-4 py-2 bg-transparent border-2 border-gold text-gold hover:bg-gold hover:text-black font-medium rounded-lg transition-colors">
+                    ⬅️ <span id="ui-btn-back"></span>
+                </button>
+            </div>
+
+            <!-- Cart Items -->
+            <div id="cart-items" class="space-y-4 mb-6">
+                <!-- Cart items will be rendered here -->
+            </div>
+
+            <!-- Cart Total & Checkout -->
+            <div id="cart-summary" class="bg-gray-800 rounded-lg p-6 hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-lg font-semibold gold-text">Total:</span>
+                    <span id="cart-grand-total" class="text-xl font-bold gold-text">0.00 €</span>
+                </div>
+                <button id="checkout-btn" class="w-full px-6 py-3 bg-gold text-black font-bold rounded-lg hover:bg-opacity-90 transition-colors">
+                    Checkout
+                </button>
+            </div>
+
+            <!-- Empty Cart Message -->
+            <div id="empty-cart" class="text-center py-16">
                 <div class="text-6xl mb-4">🛒</div>
                 <h2 class="text-2xl font-bold gold-text mb-2">Your Cart is Empty</h2>
                 <p class="text-silver">Add some delicious products to get started!</p>
             </div>
         </div>
     </main>
+
+    <!-- Sticky Cart Footer -->
+    <div id="sticky-cart" class="fixed bottom-0 left-0 right-0 bg-black bg-opacity-95 text-gold p-4 hidden z-50">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <span id="cart-count" class="text-sm">0 items</span>
+                <span id="cart-total" class="font-bold">0.00 €</span>
+            </div>
+            <button id="view-cart-btn" class="px-6 py-2 bg-gold text-black font-medium rounded-lg hover:bg-opacity-90 transition-colors">
+                View Cart
+            </button>
+        </div>
+    </div>
+
+    <!-- Scroll to Top Button -->
+    <button id="scroll-to-top" class="fixed bottom-20 right-4 w-12 h-12 bg-gold text-black rounded-full shadow-lg opacity-0 transition-opacity duration-300 z-40 hidden">
+        ⬆️
+    </button>
 
     <!-- JavaScript -->
     <script>
@@ -126,6 +168,8 @@
         let selectedFarm = null;
         let selectedCategory = null; // null means 'All'
         let categories = [];
+        let cartState = {}; // { productId: quantity }
+        let productsData = []; // Store product data for cart calculations
 
         // Get language from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -140,12 +184,28 @@
                 window.Telegram.WebApp.expand();
             }
 
+            // Load cart state from localStorage
+            loadCartState();
+
             // Handle routing
             if (startMode === 'cart') {
                 showCartView();
             } else {
                 loadTranslations();
             }
+
+            // Scroll event for scroll-to-top button
+            window.addEventListener('scroll', function() {
+                const scrollButton = document.getElementById('scroll-to-top');
+                if (window.scrollY > 300) {
+                    scrollButton.classList.remove('hidden');
+                    scrollButton.classList.remove('opacity-0');
+                    scrollButton.classList.add('opacity-100');
+                } else {
+                    scrollButton.classList.add('opacity-0');
+                    setTimeout(() => scrollButton.classList.add('hidden'), 300);
+                }
+            });
         });
 
         // Event listeners
@@ -219,9 +279,44 @@
             // Quantity controls
             if (e.target.classList.contains('qty-btn')) {
                 const btn = e.target;
-                const productId = btn.dataset.productId;
+                const productId = parseInt(btn.dataset.productId);
                 const action = btn.dataset.action;
-                updateQuantity(productId, action);
+
+                if (action === 'increase') {
+                    addToCart(productId, 1);
+                } else if (action === 'decrease') {
+                    addToCart(productId, -1);
+                }
+            }
+
+            // View cart button
+            if (e.target.id === 'view-cart-btn' || e.target.closest('#view-cart-btn')) {
+                showCartView();
+            }
+
+            // Scroll to top button
+            if (e.target.id === 'scroll-to-top') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            // Cart quantity controls
+            if (e.target.classList.contains('cart-qty-btn')) {
+                const btn = e.target;
+                const productId = parseInt(btn.dataset.productId);
+                const action = btn.dataset.action;
+
+                if (action === 'increase') {
+                    addToCart(productId, 1);
+                    renderCartItems(); // Re-render cart after quantity change
+                } else if (action === 'decrease') {
+                    addToCart(productId, -1);
+                    renderCartItems(); // Re-render cart after quantity change
+                }
+            }
+
+            // Checkout button
+            if (e.target.id === 'checkout-btn') {
+                handleCheckout();
             }
         });
 
@@ -396,8 +491,9 @@
             currentView = 'farms';
             selectedFarm = null;
 
-            // Hide shop view, show discovery view
+            // Hide all views, show discovery view
             document.getElementById('shop-view').classList.add('hidden');
+            document.getElementById('cart-view').classList.add('hidden');
             document.getElementById('discovery-view').classList.remove('hidden');
         }
 
@@ -409,6 +505,78 @@
 
             // Load translations for cart view
             loadTranslations();
+
+            // Render cart items
+            renderCartItems();
+        }
+
+        function renderCartItems() {
+            const cartItems = document.getElementById('cart-items');
+            const cartSummary = document.getElementById('cart-summary');
+            const emptyCart = document.getElementById('empty-cart');
+
+            cartItems.innerHTML = '';
+            const cartEntries = Object.entries(cartState);
+
+            if (cartEntries.length === 0) {
+                cartSummary.classList.add('hidden');
+                emptyCart.classList.remove('hidden');
+                return;
+            }
+
+            cartSummary.classList.remove('hidden');
+            emptyCart.classList.add('hidden');
+
+            cartEntries.forEach(([productId, qty]) => {
+                const product = productsData.find(p => p.id == productId);
+                if (!product) return;
+
+                const name = userLanguage === 'de' ? (product.name_de || product.name) : product.name;
+                const itemTotal = product.price * qty;
+
+                const cartItem = document.createElement('div');
+                cartItem.className = 'bg-gray-800 rounded-lg p-4';
+                cartItem.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <h3 class="font-semibold gold-text">${name}</h3>
+                            <p class="text-sm text-silver">${product.price.toFixed(2)} € each</p>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center space-x-2">
+                                <button class="cart-qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${productId}" data-action="decrease">-</button>
+                                <span class="px-3 py-1 bg-gray-700 text-silver rounded">${qty}</span>
+                                <button class="cart-qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${productId}" data-action="increase">+</button>
+                            </div>
+                            <span class="font-bold gold-text">${itemTotal.toFixed(2)} €</span>
+                        </div>
+                    </div>
+                `;
+                cartItems.appendChild(cartItem);
+            });
+
+            // Update grand total
+            const grandTotal = getCartTotal();
+            document.getElementById('cart-grand-total').textContent = `${grandTotal.toFixed(2)} €`;
+        }
+
+        function handleCheckout() {
+            const orderData = {
+                items: Object.entries(cartState).map(([productId, qty]) => {
+                    const product = productsData.find(p => p.id == productId);
+                    return {
+                        id: parseInt(productId),
+                        qty: qty,
+                        price: product ? product.price : 0
+                    };
+                }),
+                total: getCartTotal()
+            };
+
+            // Send data to Telegram
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.sendData(JSON.stringify(orderData));
+            }
         }
 
         async function loadProducts(farmId) {
@@ -429,10 +597,14 @@
                     return;
                 }
 
+                // Store product data for cart calculations
+                productsData = products;
+
                 products.forEach(product => {
                     const name = userLanguage === 'de' ? (product.name_de || product.name) : product.name;
                     const description = userLanguage === 'de' ? (product.description_de || product.description) : product.description;
                     const imageUrl = product.image_path ? `/static/uploads/${product.image_path}` : null;
+                    const currentQty = cartState[product.id] || 0;
 
                     const productCard = document.createElement('div');
                     productCard.className = 'bg-gray-800 rounded-lg overflow-hidden shadow-lg';
@@ -450,7 +622,7 @@
                                 <span class="gold-text font-bold">${product.price ? `${product.price.toFixed(2)} €` : ''}</span>
                                 <div class="flex items-center space-x-2">
                                     <button class="qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${product.id}" data-action="decrease">-</button>
-                                    <span class="qty-display px-3 py-1 bg-gray-700 text-silver rounded" data-product-id="${product.id}">0</span>
+                                    <span class="qty-display px-3 py-1 bg-gray-700 text-silver rounded" data-product-id="${product.id}">${currentQty}</span>
                                     <button class="qty-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 text-silver rounded" data-product-id="${product.id}" data-action="increase">+</button>
                                 </div>
                             </div>
@@ -512,18 +684,65 @@
             return emojiMap[categoryName] || '📦';
         }
 
-        function updateQuantity(productId, action) {
-            const qtyDisplay = document.querySelector(`.qty-display[data-product-id="${productId}"]`);
-            let currentQty = parseInt(qtyDisplay.textContent);
-
-            if (action === 'increase') {
-                currentQty++;
-            } else if (action === 'decrease' && currentQty > 0) {
-                currentQty--;
-            }
-
-            qtyDisplay.textContent = currentQty;
+        // Cart functions
+        function loadCartState() {
+            const saved = localStorage.getItem('webapp_cart');
+            cartState = saved ? JSON.parse(saved) : {};
+            updateStickyFooter();
         }
+
+        function saveCartState() {
+            localStorage.setItem('webapp_cart', JSON.stringify(cartState));
+            updateStickyFooter();
+        }
+
+        function addToCart(productId, quantity) {
+            cartState[productId] = (cartState[productId] || 0) + quantity;
+            if (cartState[productId] <= 0) {
+                delete cartState[productId];
+            }
+            saveCartState();
+            updateProductQuantityDisplay(productId);
+        }
+
+        function removeFromCart(productId) {
+            delete cartState[productId];
+            saveCartState();
+            updateProductQuantityDisplay(productId);
+        }
+
+        function getCartCount() {
+            return Object.values(cartState).reduce((sum, qty) => sum + qty, 0);
+        }
+
+        function getCartTotal() {
+            return Object.entries(cartState).reduce((total, [productId, qty]) => {
+                const product = productsData.find(p => p.id == productId);
+                return total + (product ? product.price * qty : 0);
+            }, 0);
+        }
+
+        function updateProductQuantityDisplay(productId) {
+            const qtyDisplay = document.querySelector(`.qty-display[data-product-id="${productId}"]`);
+            if (qtyDisplay) {
+                qtyDisplay.textContent = cartState[productId] || 0;
+            }
+        }
+
+        function updateStickyFooter() {
+            const footer = document.getElementById('sticky-cart');
+            const count = getCartCount();
+            const total = getCartTotal();
+
+            if (count > 0) {
+                document.getElementById('cart-count').textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+                document.getElementById('cart-total').textContent = `${total.toFixed(2)} €`;
+                footer.classList.remove('hidden');
+            } else {
+                footer.classList.add('hidden');
+            }
+        }
+
     </script>
 </body>
 </html>
